@@ -1,0 +1,423 @@
+/* ===================================
+   OOP Zeichenanwendung – Ergaenzendes CSS
+   =================================== */
+
+/* --- Werkzeug-Buttons in der Toolbar --- */
+.werkzeug-btn {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    color: #64748b;
+    border: 1px solid transparent;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.werkzeug-btn:hover {
+    background: #f1f5f9;
+    color: #334155;
+}
+
+.werkzeug-btn.aktiv {
+    background: #e0f2fe;
+    color: #0369a1;
+    border-color: #bae6fd;
+}
+
+/* --- Farbwahl-Labels --- */
+.werkzeug-farbe {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* --- Canvas-Bereich --- */
+.canvas-bereich {
+    background-image:
+        linear-gradient(45deg, #f8fafc 25%, transparent 25%),
+        linear-gradient(-45deg, #f8fafc 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #f8fafc 75%),
+        linear-gradient(-45deg, transparent 75%, #f8fafc 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+    background-color: #ffffff;
+}
+
+#zeichenflaeche {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    cursor: default;
+}
+
+/* Cursor je nach aktivem Werkzeug */
+.canvas-bereich.werkzeug-auswahl #zeichenflaeche {
+    cursor: default;
+}
+
+.canvas-bereich.werkzeug-rechteck #zeichenflaeche,
+.canvas-bereich.werkzeug-ellipse #zeichenflaeche,
+.canvas-bereich.werkzeug-dreieck #zeichenflaeche,
+.canvas-bereich.werkzeug-text #zeichenflaeche,
+.canvas-bereich.werkzeug-bild #zeichenflaeche {
+    cursor: crosshair;
+}
+
+.canvas-bereich.werkzeug-linie #zeichenflaeche {
+    cursor: crosshair;
+}
+
+/* --- UML-Karten (gemeinsam fuer Klassen- und Objektkarten) --- */
+.uml-karte {
+    border: 2px solid #334155;
+    background: #ffffff;
+    font-size: 11px;
+    margin-bottom: 8px;
+    overflow: hidden;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.uml-karte:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* Kopfbereich: Klassenname / Objektname */
+.uml-karte-kopf {
+    background: #f1f5f9;
+    border-bottom: 2px solid #334155;
+    padding: 5px 8px;
+    text-align: center;
+    font-weight: 700;
+    color: #0f172a;
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    word-break: break-word;
+}
+
+/* Attribut-Abschnitt */
+.uml-karte-attribute {
+    border-bottom: 2px solid #334155;
+    padding: 4px 8px;
+    min-height: 18px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 10px;
+    line-height: 1.6;
+    color: #334155;
+}
+
+.uml-karte-attribute:empty {
+    min-height: 10px;
+}
+
+/* Methoden-Abschnitt */
+.uml-karte-methoden {
+    padding: 4px 8px;
+    min-height: 18px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 10px;
+    line-height: 1.6;
+    color: #475569;
+}
+
+.uml-karte-methoden:empty {
+    min-height: 10px;
+}
+
+/* Einzelne Zeilen in Attributen/Methoden */
+.uml-zeile {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* --- Klassenkarten-spezifisch --- */
+.uml-karte.klassen-karte .uml-karte-kopf {
+    background: #e0f2fe;
+    cursor: pointer;
+    position: relative;
+    user-select: none;
+}
+
+/* Toggle-Pfeil im Klassen-Kopf */
+.toggle-pfeil {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 9px;
+    color: #94a3b8;
+    transition: transform 0.2s ease;
+}
+
+/* Body-Bereich (Attribute + Methoden) — animiert ein-/ausklappen */
+.uml-karte-body {
+    overflow: hidden;
+    max-height: 500px;
+    transition: max-height 0.25s ease;
+}
+
+/* Eingeklappter Zustand */
+.uml-karte.klassen-karte.eingeklappt .uml-karte-body {
+    max-height: 0;
+}
+
+.uml-karte.klassen-karte.eingeklappt .uml-karte-kopf {
+    border-bottom: none;
+}
+
+.uml-karte.klassen-karte.eingeklappt .toggle-pfeil {
+    transform: translateY(-50%) rotate(-90deg);
+}
+
+/* --- Objektkarten-spezifisch --- */
+.uml-karte.objekt-karte {
+    cursor: pointer;
+}
+
+.uml-karte.objekt-karte .uml-karte-kopf {
+    background: #fef9c3;
+    text-decoration: underline;
+    cursor: pointer;
+    position: relative;
+    user-select: none;
+}
+
+/* Eingeklappter Zustand fuer Objektkarten */
+.uml-karte.objekt-karte.eingeklappt .uml-karte-body {
+    max-height: 0;
+}
+
+.uml-karte.objekt-karte.eingeklappt .uml-karte-kopf {
+    border-bottom: none;
+}
+
+.uml-karte.objekt-karte.eingeklappt .toggle-pfeil {
+    transform: translateY(-50%) rotate(-90deg);
+}
+
+.uml-karte.objekt-karte:hover {
+    border-color: #3b82f6;
+}
+
+.uml-karte.objekt-karte.ausgewaehlt {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.uml-karte.objekt-karte.ausgewaehlt .uml-karte-kopf {
+    background: #dbeafe;
+}
+
+/* Attribut-Werte in Objektkarten */
+.uml-karte .attr-key {
+    color: #475569;
+}
+
+.uml-karte .attr-val {
+    color: #0369a1;
+    font-weight: 600;
+}
+
+/* Farbvorschau-Punkt neben Farbwerten */
+.farb-vorschau {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    border: 1px solid #cbd5e1;
+    vertical-align: middle;
+    margin-left: 3px;
+}
+
+/* --- Code-Editor --- */
+#code-editor, #klassen-editor {
+    tab-size: 4;
+}
+
+#code-editor::placeholder, #klassen-editor::placeholder {
+    color: #475569;
+    opacity: 0.6;
+}
+
+/* --- Editor-Tabs --- */
+.editor-tab {
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #94a3b8;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.editor-tab:hover {
+    color: #475569;
+}
+
+.editor-tab.aktiv {
+    color: #0369a1;
+    border-bottom-color: #0369a1;
+}
+
+/* --- Konsole --- */
+#konsole .fehler,
+#klassen-konsole .fehler {
+    color: #f87171;
+}
+
+#konsole .erfolg,
+#klassen-konsole .erfolg {
+    color: #4ade80;
+}
+
+#konsole .info,
+#klassen-konsole .info {
+    color: #60a5fa;
+}
+
+/* --- Resize-Handle fuer Editor --- */
+#editor-bereich {
+    position: relative;
+    transition: height 0.25s ease;
+}
+
+#editor-bereich.eingeklappt {
+    height: 36px !important;
+    min-height: 36px !important;
+}
+
+#editor-bereich.eingeklappt .tab-inhalt {
+    display: none !important;
+}
+
+#editor-resize-handle {
+    position: absolute;
+    top: -4px;
+    left: 0;
+    right: 0;
+    height: 8px;
+    cursor: ns-resize;
+    z-index: 10;
+    background: transparent;
+}
+
+#editor-resize-handle:hover,
+#editor-resize-handle.aktiv {
+    background: linear-gradient(to bottom, transparent, rgba(59, 130, 246, 0.15), transparent);
+}
+
+#editor-resize-handle::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 32px;
+    height: 3px;
+    border-radius: 2px;
+    background: #cbd5e1;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+#editor-resize-handle:hover::after,
+#editor-resize-handle.aktiv::after {
+    opacity: 1;
+}
+
+/* Einklappen-Button */
+.editor-einklappen-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+}
+
+.editor-einklappen-btn:hover {
+    background: #f1f5f9;
+}
+
+.editor-einklappen-btn svg {
+    transition: transform 0.25s ease;
+}
+
+#editor-bereich.eingeklappt .editor-einklappen-btn svg {
+    transform: rotate(180deg);
+}
+
+/* --- Scrollbar-Styling --- */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* --- Text-Eingabe-Dialog (fuer Text-Werkzeug) --- */
+.text-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+}
+
+.text-dialog {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+    min-width: 300px;
+}
+
+.text-dialog input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 14px;
+    outline: none;
+    margin-top: 8px;
+}
+
+.text-dialog input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.text-dialog-buttons {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
