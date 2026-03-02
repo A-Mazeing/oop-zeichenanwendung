@@ -1,6 +1,6 @@
 # OOP Zeichenanwendung
 
-Eine browserbasierte Zeichenanwendung zur Vermittlung von **Objektorientierter Programmierung (OOP)** im Schulunterricht (Klassenstufe 7). Die App demonstriert OOP-Konzepte anhand eines grafischen Editors, der nach dem **Model-View-Controller (MVC)** Muster aufgebaut ist.
+Eine browserbasierte Zeichenanwendung zur Vermittlung von **Objektorientierter Programmierung (OOP)** im Schulunterricht (Klassenstufe 7).
 
 **Live-Demo:** https://a-mazeing.github.io/oop-zeichenanwendung/
 
