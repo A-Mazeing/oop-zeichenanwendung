@@ -43,7 +43,7 @@ Ein **Bild-Asset-Manager** für die Zeichenanwendung:
 - Bilder werden dauerhaft im Browser gespeichert (**IndexedDB**)
 - Im Klassen-Editor und Code-Editor können Bilder einfach per **Dateiname** referenziert werden:
   ```
-  Feuerball = BildObjekt(self.x, self.y, 50, 50, "feuerball.png")
+  Feuerball = BildObjekt(self.x, self.y, 50, 50, "meinbild.png")
   ```
 - Beim **Speichern** eines Projekts werden alle Bilder als Base64 eingebettet → vollständig portables JSON
 - Beim **Laden** werden die Bilder automatisch wiederhergestellt
@@ -66,7 +66,7 @@ r1.verschieben(30, 0)
 r1.setzeGroesse(150, 80)
 
 // Bild einfügen (Datei muss im Dateien-Panel vorhanden sein)
-BildObjekt logo = neu BildObjekt(100, 100, 150, 150, "logo.png")
+BildObjekt logo = neu BildObjekt(100, 100, 150, 150, "meinbild.png")
 
 // Animation starten (eigene Methode nötig, s. Klassen-Editor)
 r1.starteAnimation("bewege", 50)
@@ -104,7 +104,7 @@ Der Klassen-Editor unterstützt:
 - Bedingungen: `if` / `elif` / `else`
 - Lokale Variablen: `ergebnis = self.breite * 2`
 - Ausgabe: `print(self.x)`
-- Objekte erstellen: `Feuerball = BildObjekt(self.x, self.y, 50, 50, "feuerball.png")`
+- Objekte erstellen: `Bild = BildObjekt(self.x, self.y, 50, 50, "meinbild.png")`
 - Objekte entfernen: `entferne(Feuerball)`
 - Eingebaute Funktionen: `abs()`, `min()`, `max()`, `int()`, `float()`, `str()`
 - Boolesche Operatoren: `and` / `or` / `not` (auch `und` / `oder` / `nicht`)
