@@ -195,6 +195,8 @@ class Zeichenobjekt {
             "setzeFarbe(farbe)",
             "setzeLinienFarbe(farbe)",
             "setzeLinienStaerke(staerke)",
+            "starteAnimation(methode, intervallMs)",
+            "stoppeAnimation()",
         ];
     }
 }
@@ -353,6 +355,8 @@ class Linie extends Zeichenobjekt {
             "setzePosition(x, y)",
             "setzeLinienFarbe(farbe)",
             "setzeLinienStaerke(staerke)",
+            "starteAnimation(methode, intervallMs)",
+            "stoppeAnimation()",
         ];
     }
 }
@@ -479,6 +483,8 @@ class TextObjekt extends Zeichenobjekt {
             "setzeFarbe(farbe)",
             "setzeInhalt(text)",
             "setzeSchriftGroesse(groesse)",
+            "starteAnimation(methode, intervallMs)",
+            "stoppeAnimation()",
         ];
     }
 }
@@ -597,6 +603,8 @@ class BildObjekt extends Zeichenobjekt {
             "setzePosition(x, y)",
             "setzeGroesse(breite, hoehe)",
             "setzeQuelle(url)",
+            "starteAnimation(methode, intervallMs)",
+            "stoppeAnimation()",
         ];
     }
 }
@@ -796,6 +804,9 @@ class InspektorView {
         this.objektDiv = objektDiv;
         this.dokument = dokument;
         this._onObjektKlick = null; // Callback wenn Objekt im Inspektor geklickt wird
+        this._onObjektUmbenennen = null; // Callback wenn Objekt umbenannt wird: (index, neuerName) => void
+        this._eingeklappteObjekte = new Set(); // Merkt sich eingeklappte Objektkarten (nach Name)
+        this._eingeklapptDokument = false; // Merkt sich ob Dokument-Karte eingeklappt
 
         // Klassenansicht ist statisch – einmal rendern
         this._rendereKlassen();
@@ -806,6 +817,10 @@ class InspektorView {
 
     setzeKlickHandler(handler) {
         this._onObjektKlick = handler;
+    }
+
+    setzeUmbenennenHandler(handler) {
+        this._onObjektUmbenennen = handler;
     }
 
     _rendereKlassen() {
@@ -877,7 +892,7 @@ class InspektorView {
                 : [];
             const alleMethoden = [...kl.methoden, ...eigeneMethoden];
 
-            html += `<div class="uml-karte klassen-karte" data-klasse-index="${i}">
+            html += `<div class="uml-karte klassen-karte" data-klasse-index="${i}" data-klasse-name="${kl.name}">
                 <div class="uml-karte-kopf klassen-karte-toggle">
                     ${kl.name}
                     <span class="toggle-pfeil">&#9660;</span>
@@ -909,10 +924,30 @@ class InspektorView {
         const dokAttr = this.dokument.gibAttribute();
         const dokMethoden = Dokument.gibMethoden();
 
+        // Ausgewaehlten Typ ermitteln (fuer Klassenansicht-Reorder)
+        let ausgewaehlterTyp = null;
+        for (const obj of objekte) {
+            if (obj.ausgewaehlt) {
+                ausgewaehlterTyp = obj.gibTypName().toUpperCase();
+                break;
+            }
+        }
+        this._reordereKlassen(ausgewaehlterTyp);
+
+        // Sortierte Objektliste: ausgewaehlte zuerst, Rest in Original-Reihenfolge
+        const sortiertIndizes = [];
+        for (let i = 0; i < objekte.length; i++) {
+            if (objekte[i].ausgewaehlt) sortiertIndizes.push(i);
+        }
+        for (let i = 0; i < objekte.length; i++) {
+            if (!objekte[i].ausgewaehlt) sortiertIndizes.push(i);
+        }
+
         let html = "";
 
         // Dokument-Instanz immer als Objektkarte anzeigen
-        html += `<div class="uml-karte objekt-karte">
+        const dokEingeklappt = this._eingeklapptDokument ? " eingeklappt" : "";
+        html += `<div class="uml-karte objekt-karte${dokEingeklappt}" data-objekt-name="dokument1">
             <div class="uml-karte-kopf objekt-karte-toggle">
                 dokument1 : Dokument
                 <span class="toggle-pfeil">&#9660;</span>
@@ -932,13 +967,16 @@ class InspektorView {
             </div>
         </div>`;
 
-        // Zeichenobjekte als Objektkarten
-        for (const obj of objekte) {
-            const name = obj._name || `objekt_${objekte.indexOf(obj)}`;
+        // Zeichenobjekte als Objektkarten (sortiert: ausgewaehlte zuerst)
+        for (const idx of sortiertIndizes) {
+            const obj = objekte[idx];
+            const name = obj._name || `objekt_${idx}`;
             const attr = obj.gibAttribute();
             const methoden = obj.constructor.gibMethoden();
             const istAusgewaehlt = obj.ausgewaehlt;
-            const idx = objekte.indexOf(obj);
+
+            // Collapse-State wiederherstellen
+            const istEingeklappt = this._eingeklappteObjekte.has(name);
 
             // Eigene Methoden fuer diesen Typ anzeigen
             const typName = obj.gibTypName().toUpperCase();
@@ -947,7 +985,7 @@ class InspektorView {
                 : [];
             const alleMethoden = [...methoden, ...eigeneMethoden];
 
-            html += `<div class="uml-karte objekt-karte${istAusgewaehlt ? " ausgewaehlt" : ""}" data-objekt-index="${idx}">
+            html += `<div class="uml-karte objekt-karte${istAusgewaehlt ? " ausgewaehlt" : ""}${istEingeklappt ? " eingeklappt" : ""}" data-objekt-index="${idx}" data-objekt-name="${name}">
                 <div class="uml-karte-kopf objekt-karte-toggle">
                     ${name} : ${obj.gibTypName()}
                     <span class="toggle-pfeil">&#9660;</span>
@@ -970,12 +1008,29 @@ class InspektorView {
 
         this.objektDiv.innerHTML = html;
 
-        // Toggle-Handler fuer Objektkarten
+        // Toggle-Handler fuer Objektkarten (Collapse-State in Set speichern)
         const toggleKoepfe = this.objektDiv.querySelectorAll(".objekt-karte-toggle");
         toggleKoepfe.forEach(kopf => {
             kopf.addEventListener("click", (e) => {
                 const karte = kopf.closest(".objekt-karte");
                 karte.classList.toggle("eingeklappt");
+                // Collapse-State merken
+                const objektName = karte.dataset.objektName;
+                if (objektName) {
+                    if (karte.classList.contains("eingeklappt")) {
+                        if (objektName === "dokument1") {
+                            this._eingeklapptDokument = true;
+                        } else {
+                            this._eingeklappteObjekte.add(objektName);
+                        }
+                    } else {
+                        if (objektName === "dokument1") {
+                            this._eingeklapptDokument = false;
+                        } else {
+                            this._eingeklappteObjekte.delete(objektName);
+                        }
+                    }
+                }
                 e.stopPropagation();
             });
         });
@@ -990,6 +1045,99 @@ class InspektorView {
                 }
             });
         });
+
+        // Doppelklick-Handler zum Umbenennen auf Objekt-Karten-Koepfe
+        this.objektDiv.querySelectorAll(".objekt-karte[data-objekt-index] .objekt-karte-toggle").forEach(kopf => {
+            kopf.addEventListener("dblclick", (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                const karte = kopf.closest(".objekt-karte");
+                const idx = parseInt(karte.dataset.objektIndex);
+                const alterName = karte.dataset.objektName;
+                this._starteInlineUmbenennung(kopf, idx, alterName);
+            });
+        });
+    }
+
+    // Inline-Umbenennung: Ersetzt den Kopf-Text durch ein Eingabefeld
+    _starteInlineUmbenennung(kopfElement, objektIndex, alterName) {
+        const objekte = this.dokument.alleObjekte();
+        const obj = objekte[objektIndex];
+        if (!obj) return;
+
+        const typName = obj.gibTypName();
+        const pfeil = kopfElement.querySelector(".toggle-pfeil");
+
+        // Eingabefeld erstellen
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = alterName;
+        input.className = "umbenennen-input";
+        input.style.cssText = "width: 60%; font-size: 0.82rem; font-family: 'Fira Mono', monospace; padding: 1px 4px; border: 1px solid #60a5fa; border-radius: 3px; outline: none; background: #1e293b; color: #f1f5f9;";
+
+        // Kopf-Inhalt ersetzen (nur den Textknoten, Pfeil behalten)
+        Array.from(kopfElement.childNodes).forEach(node => {
+            if (node !== pfeil) node.remove();
+        });
+        kopfElement.insertBefore(input, pfeil);
+
+        // Typ-Suffix anzeigen
+        const suffix = document.createTextNode(` : ${typName} `);
+        kopfElement.insertBefore(suffix, pfeil);
+
+        input.focus();
+        input.select();
+
+        const abschliessen = () => {
+            const neuerName = input.value.trim();
+            if (neuerName && neuerName !== alterName && /^[a-zA-ZäöüÄÖÜß_]\w*$/.test(neuerName)) {
+                // Pruefen ob Name schon vergeben ist
+                const nameVergeben = objekte.some((o, i) => i !== objektIndex && o._name === neuerName)
+                    || neuerName === "dokument1";
+                if (!nameVergeben) {
+                    // Collapse-State aktualisieren
+                    if (this._eingeklappteObjekte.has(alterName)) {
+                        this._eingeklappteObjekte.delete(alterName);
+                        this._eingeklappteObjekte.add(neuerName);
+                    }
+                    // Callback aufrufen (aktualisiert _name und codeEditor.variablen)
+                    if (this._onObjektUmbenennen) {
+                        this._onObjektUmbenennen(objektIndex, neuerName, alterName);
+                    }
+                    return; // Re-Render passiert durch dokument.aktualisieren()
+                }
+            }
+            // Bei ungueltigem/leerem Namen: Originalzustand wiederherstellen
+            this.dokument.aktualisieren();
+        };
+
+        input.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                input.blur();
+            }
+            if (e.key === "Escape") {
+                e.preventDefault();
+                input.value = alterName; // Originalname wiederherstellen
+                input.blur();
+            }
+            e.stopPropagation(); // Keyboard-Shortcuts nicht ausloesen
+        });
+
+        input.addEventListener("blur", () => {
+            abschliessen();
+        }, { once: true });
+    }
+
+    // Klassenansicht: Karte des ausgewaehlten Typs nach oben verschieben
+    _reordereKlassen(ausgewaehlterTyp) {
+        if (!ausgewaehlterTyp) return;
+
+        const zielKarte = this.klassenDiv.querySelector(`.klassen-karte[data-klasse-name="${ausgewaehlterTyp}"]`);
+        if (zielKarte && zielKarte !== this.klassenDiv.firstElementChild) {
+            // Karte an den Anfang verschieben (DOM reorder, kein innerHTML reset)
+            this.klassenDiv.insertBefore(zielKarte, this.klassenDiv.firstElementChild);
+        }
     }
 }
 
@@ -1677,33 +1825,34 @@ class MethodenEditor {
         this._klassenDef = {
             Rechteck: {
                 attribute: { x: 0, y: 0, breite: 100, hoehe: 80, fuellFarbe: '"#3b82f6"', linienFarbe: '"#1e293b"', linienStaerke: 2 },
-                methoden: ["verschieben(dx, dy)", "setzePosition(x, y)", "setzeGroesse(breite, hoehe)", "setzeFarbe(farbe)", "setzeLinienFarbe(farbe)", "setzeLinienStaerke(staerke)"],
+                methoden: ["verschieben(dx, dy)", "setzePosition(x, y)", "setzeGroesse(breite, hoehe)", "setzeFarbe(farbe)", "setzeLinienFarbe(farbe)", "setzeLinienStaerke(staerke)", "starteAnimation(methode, intervallMs)", "stoppeAnimation()"],
             },
             Ellipse: {
                 attribute: { x: 0, y: 0, breite: 100, hoehe: 80, fuellFarbe: '"#3b82f6"', linienFarbe: '"#1e293b"', linienStaerke: 2 },
-                methoden: ["verschieben(dx, dy)", "setzePosition(x, y)", "setzeGroesse(breite, hoehe)", "setzeFarbe(farbe)", "setzeLinienFarbe(farbe)", "setzeLinienStaerke(staerke)"],
+                methoden: ["verschieben(dx, dy)", "setzePosition(x, y)", "setzeGroesse(breite, hoehe)", "setzeFarbe(farbe)", "setzeLinienFarbe(farbe)", "setzeLinienStaerke(staerke)", "starteAnimation(methode, intervallMs)", "stoppeAnimation()"],
             },
             Linie: {
                 attribute: { x: 0, y: 0, x2: 100, y2: 100, linienFarbe: '"#1e293b"', linienStaerke: 2 },
-                methoden: ["verschieben(dx, dy)", "setzePosition(x, y)", "setzeLinienFarbe(farbe)", "setzeLinienStaerke(staerke)"],
+                methoden: ["verschieben(dx, dy)", "setzePosition(x, y)", "setzeLinienFarbe(farbe)", "setzeLinienStaerke(staerke)", "starteAnimation(methode, intervallMs)", "stoppeAnimation()"],
             },
             Dreieck: {
                 attribute: { x: 0, y: 0, breite: 100, hoehe: 87, fuellFarbe: '"#3b82f6"', linienFarbe: '"#1e293b"', linienStaerke: 2 },
-                methoden: ["verschieben(dx, dy)", "setzePosition(x, y)", "setzeGroesse(breite, hoehe)", "setzeFarbe(farbe)", "setzeLinienFarbe(farbe)", "setzeLinienStaerke(staerke)"],
+                methoden: ["verschieben(dx, dy)", "setzePosition(x, y)", "setzeGroesse(breite, hoehe)", "setzeFarbe(farbe)", "setzeLinienFarbe(farbe)", "setzeLinienStaerke(staerke)", "starteAnimation(methode, intervallMs)", "stoppeAnimation()"],
             },
             TextObjekt: {
                 attribute: { x: 0, y: 0, inhalt: '"Text"', schriftGroesse: 20, fuellFarbe: '"#1e293b"' },
-                methoden: ["verschieben(dx, dy)", "setzePosition(x, y)", "setzeFarbe(farbe)", "setzeInhalt(text)", "setzeSchriftGroesse(groesse)"],
+                methoden: ["verschieben(dx, dy)", "setzePosition(x, y)", "setzeFarbe(farbe)", "setzeInhalt(text)", "setzeSchriftGroesse(groesse)", "starteAnimation(methode, intervallMs)", "stoppeAnimation()"],
             },
             BildObjekt: {
                 attribute: { x: 0, y: 0, breite: 150, hoehe: 150, quelle: '""' },
-                methoden: ["verschieben(dx, dy)", "setzePosition(x, y)", "setzeGroesse(breite, hoehe)", "setzeQuelle(url)"],
+                methoden: ["verschieben(dx, dy)", "setzePosition(x, y)", "setzeGroesse(breite, hoehe)", "setzeQuelle(url)", "starteAnimation(methode, intervallMs)", "stoppeAnimation()"],
             },
         };
 
         this._initTabs();
         this._initEvents();
         this._ladeKlasse("Rechteck");
+        this._registriereTimerMethoden();
     }
 
     // --- Tab-Switching ---
@@ -1775,6 +1924,22 @@ class MethodenEditor {
         code += `    # Beispiel:\n`;
         code += `    # def verdoppleBreite(self):\n`;
         code += `    #     self.setzeGroesse(self.breite * 2, self.hoehe)\n`;
+        code += `\n`;
+        code += `    # Schleifen:\n`;
+        code += `    # def bewege10Mal(self):\n`;
+        code += `    #     for i in range(10):\n`;
+        code += `    #         self.verschieben(5, 0)\n`;
+        code += `\n`;
+        code += `    # Bedingungen:\n`;
+        code += `    # def begrenze(self):\n`;
+        code += `    #     if self.x > 400:\n`;
+        code += `    #         self.setzePosition(0, self.y)\n`;
+        code += `    #     elif self.x < 0:\n`;
+        code += `    #         self.setzePosition(400, self.y)\n`;
+        code += `\n`;
+        code += `    # Animation (im Code-Editor aufrufen):\n`;
+        code += `    # r1.starteAnimation("bewege10Mal", 100)\n`;
+        code += `    # r1.stoppeAnimation()\n`;
         code += `\n`;
 
         this.editorElement.value = code;
@@ -1875,7 +2040,11 @@ class MethodenEditor {
             // Methoden-Koerper: jede Zeile die tiefer eingerueckt ist als die def-Zeile
             if (aktuelleMethode && einrueckung > defEinrueckung) {
                 if (getrimmteZeile !== "" && !getrimmteZeile.startsWith("#")) {
-                    aktuelleMethode.koerperZeilen.push(getrimmteZeile);
+                    // Relative Einrueckung speichern (relativ zur def-Zeile)
+                    aktuelleMethode.koerperZeilen.push({
+                        einrueckung: einrueckung - defEinrueckung,
+                        inhalt: getrimmteZeile,
+                    });
                 }
                 continue;
             }
@@ -1938,38 +2107,191 @@ class MethodenEditor {
             const Klasse = klassenMap[klassenName];
 
             for (const methode of methoden) {
-                // Eine JS-Funktion erstellen die die Python-aehnlichen Anweisungen ausfuehrt
-                const anweisungen = methode.koerperZeilen;
+                const koerperZeilen = methode.koerperZeilen;
                 const paramNamen = methode.parameter;
                 const that = this;
 
                 Klasse.prototype[methode.name] = function (...args) {
-                    // "self" ist "this" (das aktuelle Objekt)
                     const self = this;
 
-                    // Parameter zuweisen
-                    const paramWerte = {};
+                    // Parameter als lokale Variablen zuweisen
+                    const lokaleVars = {};
                     for (let i = 0; i < paramNamen.length; i++) {
-                        paramWerte[paramNamen[i]] = args[i] !== undefined ? args[i] : undefined;
+                        lokaleVars[paramNamen[i]] = args[i] !== undefined ? args[i] : undefined;
                     }
 
-                    // Anweisungen zeilenweise ausfuehren
-                    for (const anweisung of anweisungen) {
-                        that._fuehreAnweisungAus(self, anweisung, paramWerte);
-                    }
+                    // Block-Interpreter aufrufen
+                    that._fuehreBlockAus(self, koerperZeilen, lokaleVars);
                 };
             }
         }
     }
 
+    // --- Block-Interpreter: Fuehrt eine Liste von Zeilen mit Einrueckung aus ---
+    // Jede Zeile ist { einrueckung: number, inhalt: string }
+    // Kompatibilitaet: Falls eine Zeile ein reiner String ist (alt), wird sie als { einrueckung: 4, inhalt: zeile } behandelt
+    _fuehreBlockAus(self, zeilen, lokaleVars, maxIterationen = 10000) {
+        let i = 0;
+        let iterationsZaehler = 0;
+
+        while (i < zeilen.length) {
+            if (++iterationsZaehler > maxIterationen) {
+                throw new Error("Maximale Iterationsanzahl ueberschritten (Endlosschleife?).");
+            }
+
+            const zeile = this._normalisiereZeile(zeilen[i]);
+            const inhalt = zeile.inhalt;
+            const meineEinrueckung = zeile.einrueckung;
+
+            // --- for-Schleife: for variable in range(start, ende): ---
+            const forMatch = inhalt.match(/^for\s+(\w+)\s+in\s+range\((.+)\)\s*:$/);
+            if (forMatch) {
+                const varName = forMatch[1];
+                const rangeArgs = this._parseRangeArgs(self, forMatch[2], lokaleVars);
+                const unterBlock = this._extrahiereUnterBlock(zeilen, i, meineEinrueckung);
+                i += 1 + unterBlock.length;
+
+                const start = rangeArgs.length >= 2 ? rangeArgs[0] : 0;
+                const ende = rangeArgs.length >= 2 ? rangeArgs[1] : rangeArgs[0];
+                const schritt = rangeArgs.length >= 3 ? rangeArgs[2] : 1;
+
+                if (schritt === 0) throw new Error("Schrittweite darf nicht 0 sein.");
+                for (let v = start; schritt > 0 ? v < ende : v > ende; v += schritt) {
+                    lokaleVars[varName] = v;
+                    this._fuehreBlockAus(self, unterBlock, lokaleVars, maxIterationen - iterationsZaehler);
+                }
+                continue;
+            }
+
+            // --- while-Schleife: while bedingung: ---
+            const whileMatch = inhalt.match(/^while\s+(.+)\s*:$/);
+            if (whileMatch) {
+                const bedingungStr = whileMatch[1];
+                const unterBlock = this._extrahiereUnterBlock(zeilen, i, meineEinrueckung);
+                i += 1 + unterBlock.length;
+
+                let schleifenZaehler = 0;
+                while (this._werteBedingungAus(self, bedingungStr, lokaleVars)) {
+                    if (++schleifenZaehler > maxIterationen) {
+                        throw new Error("While-Schleife: Maximale Iterationsanzahl ueberschritten.");
+                    }
+                    this._fuehreBlockAus(self, unterBlock, lokaleVars, maxIterationen - iterationsZaehler);
+                }
+                continue;
+            }
+
+            // --- if / elif / else ---
+            const ifMatch = inhalt.match(/^if\s+(.+)\s*:$/);
+            if (ifMatch) {
+                const ergebnis = this._verarbeiteIfBlock(self, zeilen, i, meineEinrueckung, lokaleVars, maxIterationen - iterationsZaehler);
+                i = ergebnis.naechsterIndex;
+                continue;
+            }
+
+            // --- print(ausdruck) ---
+            const printMatch = inhalt.match(/^print\((.+)\)$/);
+            if (printMatch) {
+                const wert = this._werteAusdruckAus(self, printMatch[1].trim(), lokaleVars);
+                this._konsoleInfo(String(wert));
+                i++;
+                continue;
+            }
+
+            // --- Einzel-Anweisung ausfuehren ---
+            this._fuehreAnweisungAus(self, inhalt, lokaleVars);
+            i++;
+        }
+    }
+
+    // Normalisiert eine Zeile: String -> {einrueckung, inhalt}
+    _normalisiereZeile(zeile) {
+        if (typeof zeile === "string") {
+            return { einrueckung: 4, inhalt: zeile };
+        }
+        return zeile;
+    }
+
+    // Extrahiert den Unterblock (tiefer eingerueckt) nach einer Block-Kopfzeile
+    _extrahiereUnterBlock(zeilen, kopfIndex, kopfEinrueckung) {
+        const block = [];
+        let j = kopfIndex + 1;
+        while (j < zeilen.length) {
+            const z = this._normalisiereZeile(zeilen[j]);
+            if (z.einrueckung <= kopfEinrueckung) break;
+            block.push(z);
+            j++;
+        }
+        return block;
+    }
+
+    // Verarbeitet if / elif / else Bloecke
+    _verarbeiteIfBlock(self, zeilen, startIndex, meineEinrueckung, lokaleVars, maxIterationen) {
+        let i = startIndex;
+        let ausgefuehrt = false;
+
+        // if-Block
+        const ifZeile = this._normalisiereZeile(zeilen[i]);
+        const ifMatch = ifZeile.inhalt.match(/^if\s+(.+)\s*:$/);
+        const ifBedingung = ifMatch[1];
+        const ifBlock = this._extrahiereUnterBlock(zeilen, i, meineEinrueckung);
+        i += 1 + ifBlock.length;
+
+        if (this._werteBedingungAus(self, ifBedingung, lokaleVars)) {
+            this._fuehreBlockAus(self, ifBlock, lokaleVars, maxIterationen);
+            ausgefuehrt = true;
+        }
+
+        // elif / else Bloecke
+        while (i < zeilen.length) {
+            const naechsteZeile = this._normalisiereZeile(zeilen[i]);
+            if (naechsteZeile.einrueckung !== meineEinrueckung) break;
+
+            const elifMatch = naechsteZeile.inhalt.match(/^elif\s+(.+)\s*:$/);
+            if (elifMatch) {
+                const elifBlock = this._extrahiereUnterBlock(zeilen, i, meineEinrueckung);
+                i += 1 + elifBlock.length;
+
+                if (!ausgefuehrt && this._werteBedingungAus(self, elifMatch[1], lokaleVars)) {
+                    this._fuehreBlockAus(self, elifBlock, lokaleVars, maxIterationen);
+                    ausgefuehrt = true;
+                }
+                continue;
+            }
+
+            const elseMatch = naechsteZeile.inhalt.match(/^else\s*:$/);
+            if (elseMatch) {
+                const elseBlock = this._extrahiereUnterBlock(zeilen, i, meineEinrueckung);
+                i += 1 + elseBlock.length;
+
+                if (!ausgefuehrt) {
+                    this._fuehreBlockAus(self, elseBlock, lokaleVars, maxIterationen);
+                }
+                continue;
+            }
+
+            // Kein elif/else mehr -> Block beenden
+            break;
+        }
+
+        return { naechsterIndex: i };
+    }
+
+    // range() Argumente parsen: range(5), range(1, 10), range(0, 20, 2)
+    _parseRangeArgs(self, argsStr, lokaleVars) {
+        return argsStr.split(",").map(a => {
+            const wert = this._werteAusdruckAus(self, a.trim(), lokaleVars);
+            return Math.floor(Number(wert));
+        });
+    }
+
     // --- Eine Anweisung innerhalb einer eigenen Methode ausfuehren ---
-    _fuehreAnweisungAus(self, anweisung, paramWerte) {
+    _fuehreAnweisungAus(self, anweisung, lokaleVars) {
         // Pattern: self.methode(args)
         const methodenMatch = anweisung.match(/^self\.(\w+)\(([^)]*)\)$/);
         if (methodenMatch) {
             const methName = methodenMatch[1];
             const argsStr = methodenMatch[2];
-            const args = this._parseMethodenArgs(self, argsStr, paramWerte);
+            const args = this._parseMethodenArgs(self, argsStr, lokaleVars);
 
             if (typeof self[methName] === "function") {
                 self[methName](...args);
@@ -1980,11 +2302,31 @@ class MethodenEditor {
         }
 
         // Pattern: self.attribut = ausdruck
-        const zuweisungMatch = anweisung.match(/^self\.(\w+)\s*=\s*(.+)$/);
-        if (zuweisungMatch) {
-            const attrName = zuweisungMatch[1];
-            const wert = this._werteAusdruckAus(self, zuweisungMatch[2].trim(), paramWerte);
+        const selfZuweisungMatch = anweisung.match(/^self\.(\w+)\s*=\s*(.+)$/);
+        if (selfZuweisungMatch) {
+            const attrName = selfZuweisungMatch[1];
+            const wert = this._werteAusdruckAus(self, selfZuweisungMatch[2].trim(), lokaleVars);
             self[attrName] = wert;
+            return;
+        }
+
+        // Pattern: lokale Variable zuweisen: varName = ausdruck
+        const varZuweisungMatch = anweisung.match(/^(\w+)\s*=\s*(.+)$/);
+        if (varZuweisungMatch) {
+            const varName = varZuweisungMatch[1];
+            // Reservierte Woerter nicht als Variable
+            if (!["if", "elif", "else", "for", "while", "def", "class", "True", "False", "print"].includes(varName)) {
+                const wert = this._werteAusdruckAus(self, varZuweisungMatch[2].trim(), lokaleVars);
+                lokaleVars[varName] = wert;
+                return;
+            }
+        }
+
+        // Pattern: print(ausdruck) — Fallback fuer flache Ausfuehrung
+        const printMatch = anweisung.match(/^print\((.+)\)$/);
+        if (printMatch) {
+            const wert = this._werteAusdruckAus(self, printMatch[1].trim(), lokaleVars);
+            this._konsoleInfo(String(wert));
             return;
         }
 
@@ -1992,16 +2334,61 @@ class MethodenEditor {
     }
 
     // --- Argumente fuer Methoden-Aufrufe in eigenen Methoden parsen ---
-    _parseMethodenArgs(self, argsStr, paramWerte) {
+    _parseMethodenArgs(self, argsStr, lokaleVars) {
         if (!argsStr || argsStr.trim() === "") return [];
 
         return argsStr.split(",").map(arg => {
-            return this._werteAusdruckAus(self, arg.trim(), paramWerte);
+            return this._werteAusdruckAus(self, arg.trim(), lokaleVars);
         });
     }
 
-    // --- Einfache Ausdruecke auswerten ---
-    _werteAusdruckAus(self, ausdruck, paramWerte) {
+    // --- Bedingung auswerten (gibt Boolean zurueck) ---
+    _werteBedingungAus(self, bedingung, lokaleVars) {
+        bedingung = bedingung.trim();
+
+        // "and" und "or" Verknuepfungen (einfache Ebene)
+        // Zuerst "or" aufteilen (niedrigere Prioritaet)
+        if (bedingung.includes(" or ") || bedingung.includes(" oder ")) {
+            const teile = bedingung.split(/\s+(?:or|oder)\s+/);
+            return teile.some(teil => this._werteBedingungAus(self, teil, lokaleVars));
+        }
+
+        // Dann "and" aufteilen (hoehere Prioritaet)
+        if (bedingung.includes(" and ") || bedingung.includes(" und ")) {
+            const teile = bedingung.split(/\s+(?:and|und)\s+/);
+            return teile.every(teil => this._werteBedingungAus(self, teil, lokaleVars));
+        }
+
+        // "not" / "nicht" Praefixf
+        const notMatch = bedingung.match(/^(?:not|nicht)\s+(.+)$/);
+        if (notMatch) {
+            return !this._werteBedingungAus(self, notMatch[1], lokaleVars);
+        }
+
+        // Vergleichsoperatoren
+        const vergleichMatch = bedingung.match(/^(.+?)\s*(==|!=|>=|<=|>|<)\s*(.+)$/);
+        if (vergleichMatch) {
+            const links = this._werteAusdruckAus(self, vergleichMatch[1].trim(), lokaleVars);
+            const op = vergleichMatch[2];
+            const rechts = this._werteAusdruckAus(self, vergleichMatch[3].trim(), lokaleVars);
+
+            switch (op) {
+                case "==": return links == rechts;
+                case "!=": return links != rechts;
+                case ">=": return links >= rechts;
+                case "<=": return links <= rechts;
+                case ">": return links > rechts;
+                case "<": return links < rechts;
+            }
+        }
+
+        // Einfacher Wahrheitswert
+        const wert = this._werteAusdruckAus(self, bedingung, lokaleVars);
+        return !!wert;
+    }
+
+    // --- Ausdruecke auswerten (erweitert) ---
+    _werteAusdruckAus(self, ausdruck, lokaleVars) {
         ausdruck = ausdruck.trim();
 
         // String-Literal
@@ -2011,7 +2398,7 @@ class MethodenEditor {
         }
 
         // Zahl
-        if (!isNaN(ausdruck) && ausdruck !== "") {
+        if (!isNaN(ausdruck) && ausdruck !== "" && !ausdruck.includes(" ")) {
             return parseFloat(ausdruck);
         }
 
@@ -2019,41 +2406,84 @@ class MethodenEditor {
         if (ausdruck === "True" || ausdruck === "true" || ausdruck === "wahr") return true;
         if (ausdruck === "False" || ausdruck === "false" || ausdruck === "falsch") return false;
 
-        // Einfache Arithmetik mit self-Attributen: self.breite * 2, self.x + 10, etc.
-        if (ausdruck.includes("self.") || Object.keys(paramWerte).some(p => ausdruck.includes(p))) {
+        // None / null
+        if (ausdruck === "None" || ausdruck === "null") return null;
+
+        // abs() Funktion
+        const absMatch = ausdruck.match(/^abs\((.+)\)$/);
+        if (absMatch) {
+            return Math.abs(this._werteAusdruckAus(self, absMatch[1], lokaleVars));
+        }
+
+        // min() / max() Funktionen
+        const minMatch = ausdruck.match(/^min\((.+)\)$/);
+        if (minMatch) {
+            const args = minMatch[1].split(",").map(a => this._werteAusdruckAus(self, a.trim(), lokaleVars));
+            return Math.min(...args);
+        }
+        const maxMatch = ausdruck.match(/^max\((.+)\)$/);
+        if (maxMatch) {
+            const args = maxMatch[1].split(",").map(a => this._werteAusdruckAus(self, a.trim(), lokaleVars));
+            return Math.max(...args);
+        }
+
+        // int() / float() Konvertierung
+        const intMatch = ausdruck.match(/^int\((.+)\)$/);
+        if (intMatch) {
+            return Math.floor(this._werteAusdruckAus(self, intMatch[1], lokaleVars));
+        }
+        const floatMatch = ausdruck.match(/^float\((.+)\)$/);
+        if (floatMatch) {
+            return parseFloat(this._werteAusdruckAus(self, floatMatch[1], lokaleVars));
+        }
+
+        // str() Konvertierung
+        const strMatch = ausdruck.match(/^str\((.+)\)$/);
+        if (strMatch) {
+            return String(this._werteAusdruckAus(self, strMatch[1], lokaleVars));
+        }
+
+        // Arithmetik/Vergleich mit self-Attributen, lokalen Variablen oder Parametern
+        if (ausdruck.includes("self.") || ausdruck.includes("+") || ausdruck.includes("-") ||
+            ausdruck.includes("*") || ausdruck.includes("/") || ausdruck.includes("%") ||
+            ausdruck.includes("(") || Object.keys(lokaleVars).some(p => ausdruck.includes(p))) {
             try {
                 // self.attribut durch Werte ersetzen
                 let jsAusdruck = ausdruck.replace(/self\.(\w+)/g, (match, attr) => {
                     const wert = self[attr];
-                    if (typeof wert === "string") return `"${wert}"`;
+                    if (typeof wert === "string") return JSON.stringify(wert);
+                    if (wert === null || wert === undefined) return "null";
                     return wert;
                 });
-                // Parameter-Variablen durch Werte ersetzen
-                for (const [param, wert] of Object.entries(paramWerte)) {
-                    const regex = new RegExp(`\\b${param}\\b`, "g");
+
+                // Lokale Variablen und Parameter durch Werte ersetzen
+                // Sortiere nach Laenge (laengste zuerst) um Teilstring-Ersetzungen zu vermeiden
+                const sortierteVars = Object.keys(lokaleVars).sort((a, b) => b.length - a.length);
+                for (const varName of sortierteVars) {
+                    const wert = lokaleVars[varName];
+                    const regex = new RegExp(`\\b${varName}\\b`, "g");
                     if (typeof wert === "string") {
-                        jsAusdruck = jsAusdruck.replace(regex, `"${wert}"`);
+                        jsAusdruck = jsAusdruck.replace(regex, JSON.stringify(wert));
+                    } else if (wert === null || wert === undefined) {
+                        jsAusdruck = jsAusdruck.replace(regex, "null");
                     } else {
                         jsAusdruck = jsAusdruck.replace(regex, wert);
                     }
                 }
-                // Sicher auswerten (nur Arithmetik erlauben)
-                if (/^[\d\s+\-*/().,"]+$/.test(jsAusdruck)) {
-                    return Function(`"use strict"; return (${jsAusdruck})`)();
-                }
-                // Erweitert: auch Strings erlauben
-                if (/^[\d\s+\-*/().,"'\w]+$/.test(jsAusdruck)) {
-                    return Function(`"use strict"; return (${jsAusdruck})`)();
-                }
+
+                // Python-Operatoren uebersetzen
+                jsAusdruck = jsAusdruck.replace(/\s+\/\/\s+/g, " / ").replace(/\bTrue\b/g, "true").replace(/\bFalse\b/g, "false");
+
+                // Sicher auswerten
                 return Function(`"use strict"; return (${jsAusdruck})`)();
             } catch (e) {
-                throw new Error(`Ausdruck konnte nicht ausgewertet werden: "${ausdruck}"`);
+                throw new Error(`Ausdruck konnte nicht ausgewertet werden: "${ausdruck}" -> ${e.message}`);
             }
         }
 
-        // Parameter-Variable direkt
-        if (paramWerte[ausdruck] !== undefined) {
-            return paramWerte[ausdruck];
+        // Lokale Variable direkt
+        if (lokaleVars[ausdruck] !== undefined) {
+            return lokaleVars[ausdruck];
         }
 
         // self.attribut direkt
@@ -2061,8 +2491,48 @@ class MethodenEditor {
             return self[ausdruck.substring(5)];
         }
 
-        // Als String behandeln
+        // Als String behandeln (Fallback)
         return ausdruck;
+    }
+
+    // --- Timer-Funktionen fuer Animationen ---
+    // Startet eine wiederholte Ausfuehrung einer eigenen Methode
+    // Nutzung aus dem Code-Editor: objekt.starteAnimation(methodenName, intervallMs)
+    _registriereTimerMethoden() {
+        const klassenMap = { Rechteck, Ellipse, Linie, Dreieck, TextObjekt, BildObjekt };
+        const that = this;
+
+        for (const Klasse of Object.values(klassenMap)) {
+            if (!Klasse.prototype.starteAnimation) {
+                Klasse.prototype.starteAnimation = function (methodenName, intervallMs) {
+                    if (typeof this[methodenName] !== "function") {
+                        throw new Error(`Methode "${methodenName}" existiert nicht.`);
+                    }
+                    // Vorherige Animation stoppen
+                    if (this._animationTimer) {
+                        clearInterval(this._animationTimer);
+                    }
+                    this._animationTimer = setInterval(() => {
+                        try {
+                            this[methodenName]();
+                            that.dokument.aktualisieren();
+                        } catch (e) {
+                            clearInterval(this._animationTimer);
+                            that._konsoleFehler(`Animation gestoppt: ${e.message}`);
+                        }
+                    }, intervallMs || 50);
+                };
+            }
+
+            if (!Klasse.prototype.stoppeAnimation) {
+                Klasse.prototype.stoppeAnimation = function () {
+                    if (this._animationTimer) {
+                        clearInterval(this._animationTimer);
+                        this._animationTimer = null;
+                    }
+                };
+            }
+        }
     }
 
     // --- Konsole ---
@@ -2147,6 +2617,21 @@ class MethodenEditor {
     // Inspektor-Klick -> Objekt auf Canvas auswaehlen
     inspektorView.setzeKlickHandler((index) => {
         controller.waehleObjektAus(index);
+    });
+
+    // Inspektor-Doppelklick -> Objekt umbenennen
+    inspektorView.setzeUmbenennenHandler((index, neuerName, alterName) => {
+        const obj = dokument.objekte[index];
+        if (!obj) return;
+
+        // Alten Key aus CodeEditor-Variablen entfernen, neuen setzen
+        if (alterName && codeEditor.variablen[alterName] === obj) {
+            delete codeEditor.variablen[alterName];
+        }
+        obj._name = neuerName;
+        codeEditor.variablen[neuerName] = obj;
+
+        dokument.aktualisieren();
     });
 
     // Wenn Objekte per Maus erstellt werden -> im Code-Editor registrieren

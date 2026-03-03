@@ -189,6 +189,16 @@
     user-select: none;
 }
 
+/* Umbenennen-Eingabefeld in Objektkarten */
+.umbenennen-input {
+    text-decoration: none !important;
+    font-weight: 700;
+}
+
+.umbenennen-input:focus {
+    box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.4);
+}
+
 /* Eingeklappter Zustand fuer Objektkarten */
 .uml-karte.objekt-karte.eingeklappt .uml-karte-body {
     max-height: 0;
