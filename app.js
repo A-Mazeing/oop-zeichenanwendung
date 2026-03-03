@@ -2310,6 +2310,38 @@ class MethodenEditor {
             return;
         }
 
+        // Pattern: ObjektName.methode(args) — Zugriff auf andere Objekte via codeEditor.variablen
+        const fremdMethodenMatch = anweisung.match(/^(\w+)\.(\w+)\(([^)]*)\)$/);
+        if (fremdMethodenMatch) {
+            const objName = fremdMethodenMatch[1];
+            const methName = fremdMethodenMatch[2];
+            const argsStr = fremdMethodenMatch[3];
+            const obj = this._loeseName(objName, lokaleVars);
+            if (obj === undefined || obj === null) {
+                throw new Error(`Objekt "${objName}" nicht gefunden. Verfuegbar: ${this._verfuegbareNamen(lokaleVars)}`);
+            }
+            if (typeof obj[methName] !== "function") {
+                throw new Error(`Methode "${methName}" existiert nicht auf "${objName}".`);
+            }
+            const args = this._parseMethodenArgs(self, argsStr, lokaleVars);
+            obj[methName](...args);
+            return;
+        }
+
+        // Pattern: ObjektName.attribut = ausdruck — Attribut eines anderen Objekts setzen
+        const fremdZuweisungMatch = anweisung.match(/^(\w+)\.(\w+)\s*=\s*(.+)$/);
+        if (fremdZuweisungMatch) {
+            const objName = fremdZuweisungMatch[1];
+            const attrName = fremdZuweisungMatch[2];
+            const obj = this._loeseName(objName, lokaleVars);
+            if (obj === undefined || obj === null) {
+                throw new Error(`Objekt "${objName}" nicht gefunden. Verfuegbar: ${this._verfuegbareNamen(lokaleVars)}`);
+            }
+            const wert = this._werteAusdruckAus(self, fremdZuweisungMatch[3].trim(), lokaleVars);
+            obj[attrName] = wert;
+            return;
+        }
+
         // Pattern: lokale Variable zuweisen: varName = ausdruck
         const varZuweisungMatch = anweisung.match(/^(\w+)\s*=\s*(.+)$/);
         if (varZuweisungMatch) {
@@ -2331,6 +2363,22 @@ class MethodenEditor {
         }
 
         throw new Error(`Unbekannte Anweisung: "${anweisung}"`);
+    }
+
+    // Namen in lokalen Variablen ODER in codeEditor.variablen nachschlagen
+    _loeseName(name, lokaleVars) {
+        if (lokaleVars[name] !== undefined) return lokaleVars[name];
+        if (this.codeEditor && this.codeEditor.variablen && this.codeEditor.variablen[name] !== undefined) {
+            return this.codeEditor.variablen[name];
+        }
+        return undefined;
+    }
+
+    // Alle verfuegbaren Namen fuer Fehlermeldungen aufzaehlen
+    _verfuegbareNamen(lokaleVars) {
+        const lokal = Object.keys(lokaleVars);
+        const global = this.codeEditor && this.codeEditor.variablen ? Object.keys(this.codeEditor.variablen) : [];
+        return [...new Set([...lokal, ...global])].join(", ");
     }
 
     // --- Argumente fuer Methoden-Aufrufe in eigenen Methoden parsen ---
@@ -2443,10 +2491,20 @@ class MethodenEditor {
             return String(this._werteAusdruckAus(self, strMatch[1], lokaleVars));
         }
 
-        // Arithmetik/Vergleich mit self-Attributen, lokalen Variablen oder Parametern
+        // ObjektName.attribut direkt (z.B. "Feuerball.x")
+        const fremdAttrDirektMatch = ausdruck.match(/^(\w+)\.(\w+)$/);
+        if (fremdAttrDirektMatch) {
+            const obj = this._loeseName(fremdAttrDirektMatch[1], lokaleVars);
+            if (obj !== undefined && obj !== null && typeof obj === "object") {
+                return obj[fremdAttrDirektMatch[2]];
+            }
+        }
+
+        // Arithmetik/Vergleich mit self-Attributen, lokalen Variablen, ObjektName.attribut oder Parametern
         if (ausdruck.includes("self.") || ausdruck.includes("+") || ausdruck.includes("-") ||
             ausdruck.includes("*") || ausdruck.includes("/") || ausdruck.includes("%") ||
-            ausdruck.includes("(") || Object.keys(lokaleVars).some(p => ausdruck.includes(p))) {
+            ausdruck.includes("(") || ausdruck.includes(".") ||
+            Object.keys(lokaleVars).some(p => ausdruck.includes(p))) {
             try {
                 // self.attribut durch Werte ersetzen
                 let jsAusdruck = ausdruck.replace(/self\.(\w+)/g, (match, attr) => {
@@ -2454,6 +2512,18 @@ class MethodenEditor {
                     if (typeof wert === "string") return JSON.stringify(wert);
                     if (wert === null || wert === undefined) return "null";
                     return wert;
+                });
+
+                // ObjektName.attribut durch Werte ersetzen (z.B. Feuerball.x -> 42)
+                jsAusdruck = jsAusdruck.replace(/\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)\b/g, (match, objName, attrName) => {
+                    const obj = this._loeseName(objName, lokaleVars);
+                    if (obj !== undefined && obj !== null && typeof obj === "object") {
+                        const wert = obj[attrName];
+                        if (typeof wert === "string") return JSON.stringify(wert);
+                        if (wert === null || wert === undefined) return "null";
+                        if (typeof wert === "number") return wert;
+                    }
+                    return match; // unveraendert lassen, wenn nicht aufloesbar
                 });
 
                 // Lokale Variablen und Parameter durch Werte ersetzen
