@@ -10,7 +10,7 @@ Eine browserbasierte Zeichenanwendung zur Vermittlung von **Objektorientierter P
 
 ### Zeichenwerkzeuge
 
-Mit der Toolbar auf der linken Seite lassen sich folgende Objekte auf der Zeichenfläche erstellen:
+Mit der Toolbar oben lassen sich folgende Objekte auf der Zeichenfläche erstellen:
 
 | Werkzeug | Taste | Beschreibung |
 |---|---|---|
@@ -20,10 +20,33 @@ Mit der Toolbar auf der linken Seite lassen sich folgende Objekte auf der Zeiche
 | Linie | `L` | Linie ziehen |
 | Dreieck | `D` | Dreieck aufziehen |
 | Text | `T` | Textobjekt platzieren |
-| Bild | `B` | Bild per URL oder Datei einfügen |
+| Bild | `B` | Bild per URL oder aus dem Datei-Panel einfügen |
 
 - **Füllfarbe und Linienfarbe** sind frei wählbar (Farbpicker in der Toolbar)
 - **Objekte löschen:** Auswählen + `Entf`-Taste
+
+---
+
+### Linkes Panel: Hierarchie & Dateien
+
+Das linke Panel enthält zwei Tabs:
+
+#### Hierarchie-Tab
+Zeigt alle Objekte auf der Zeichenfläche als **flache Liste** mit Typ-Icon und Name.
+- Klick auf einen Eintrag → Objekt wird auf dem Canvas ausgewählt
+- Aktualisiert sich live bei jeder Änderung (Objekte hinzufügen, löschen, umbenennen)
+
+#### Dateien-Tab
+Ein **Bild-Asset-Manager** für die Zeichenanwendung:
+- Bilder per **Drag & Drop** oder **Upload-Button** hinzufügen (PNG, JPG, GIF, SVG, WebP)
+- Bilder werden mit **Vorschau-Thumbnail** und Dateiname angezeigt
+- Bilder werden dauerhaft im Browser gespeichert (**IndexedDB**)
+- Im Klassen-Editor und Code-Editor können Bilder einfach per **Dateiname** referenziert werden:
+  ```
+  Feuerball = BildObjekt(self.x, self.y, 50, 50, "feuerball.png")
+  ```
+- Beim **Speichern** eines Projekts werden alle Bilder als Base64 eingebettet → vollständig portables JSON
+- Beim **Laden** werden die Bilder automatisch wiederhergestellt
 
 ---
 
@@ -42,9 +65,8 @@ r1.setzeFarbe("rot")
 r1.verschieben(30, 0)
 r1.setzeGroesse(150, 80)
 
-// Ellipse erstellen
-Ellipse e1 = neu Ellipse(200, 150, 100, 100)
-e1.setzeFarbe("blau")
+// Bild einfügen (Datei muss im Dateien-Panel vorhanden sein)
+BildObjekt logo = neu BildObjekt(100, 100, 150, 150, "logo.png")
 
 // Animation starten (eigene Methode nötig, s. Klassen-Editor)
 r1.starteAnimation("bewege", 50)
@@ -82,6 +104,8 @@ Der Klassen-Editor unterstützt:
 - Bedingungen: `if` / `elif` / `else`
 - Lokale Variablen: `ergebnis = self.breite * 2`
 - Ausgabe: `print(self.x)`
+- Objekte erstellen: `Feuerball = BildObjekt(self.x, self.y, 50, 50, "feuerball.png")`
+- Objekte entfernen: `entferne(Feuerball)`
 - Eingebaute Funktionen: `abs()`, `min()`, `max()`, `int()`, `float()`, `str()`
 - Boolesche Operatoren: `and` / `or` / `not` (auch `und` / `oder` / `nicht`)
 - Vergleiche: `==`, `!=`, `<`, `>`, `<=`, `>=`
@@ -132,18 +156,18 @@ Der rechte Bereich zeigt die aktuelle OOP-Struktur als **UML-Diagramm**:
   - Collapse-Zustände bleiben beim Wechsel der Auswahl erhalten
 - **Klick** auf eine Objektkarte → Objekt wird auf der Zeichenfläche ausgewählt
 - **Doppelklick** auf den Kopf einer Objektkarte → Objekt umbenennen (Inline-Eingabe)
-  - Name wird in allen Views synchronisiert (Inspektor, Code-Editor, Serialisierung)
+  - Name wird in allen Views synchronisiert (Inspektor, Hierarchie, Code-Editor, Serialisierung)
   - Validierung: kein Leerzeichen, kein bereits vergebener Name, gültiger Bezeichner
   - `Enter` bestätigt, `Escape` bricht ab
-- Alle Ansichten synchronisieren sich **bidirektional** (Canvas ↔ Inspektor ↔ Code-Editor)
+- Alle Ansichten synchronisieren sich **bidirektional** (Canvas ↔ Inspektor ↔ Hierarchie ↔ Code-Editor)
 
 ---
 
 ### Projekte speichern & laden
 
-- **Speichern:** Speichert das gesamte Projekt (Objekte, Code, eigene Methoden) als `.json`-Datei
-- **Laden:** Lädt ein gespeichertes Projekt aus einer `.json`-Datei wieder
-- Bilder werden als **Data-URL** eingebettet und sind vollständig portabel
+- **Speichern:** Speichert das gesamte Projekt (Objekte, Code, eigene Methoden, **Bild-Assets**) als `.json`-Datei
+- **Laden:** Lädt ein gespeichertes Projekt und stellt alle Bild-Assets im DateiManager wieder her
+- Bilder werden als **Base64** eingebettet → vollständig portables, selbstständiges JSON
 
 ---
 
@@ -157,9 +181,10 @@ Der rechte Bereich zeigt die aktuelle OOP-Struktur als **UML-Diagramm**:
 ## Technischer Aufbau
 
 ```
-index.html   – HTML-Struktur (Layout, Toolbar, Canvas, Inspektor, Editor)
-style.css    – Eigenes CSS (ergänzt Tailwind CSS)
-app.js       – Gesamte Anwendungslogik (~2700 Zeilen)
+OOP-Grafik/
+├── index.html   – HTML-Struktur (Layout, Toolbar, linkes Panel, Canvas, Inspektor, Editor)
+├── style.css    – Eigenes CSS (ergänzt Tailwind CSS)
+└── app.js       – Gesamte Anwendungslogik (~3500 Zeilen)
 ```
 
 **Architektur (MVC + Observer):**
@@ -171,15 +196,18 @@ Model:      Zeichenobjekt (abstrakt)
             ├── Linie
             ├── Dreieck
             ├── TextObjekt
-            └── BildObjekt
-            Dokument  (verwaltet alle Objekte, Observer-Pattern)
+            └── BildObjekt      (OffscreenCanvas-Cache, DateiManager-Auflösung)
+            Dokument            (Observer-Pattern, rAF-Batching)
+            DateiManager        (IndexedDB-Persistenz, Base64-Export/Import)
 
-View:       CanvasView     (HTML5 Canvas Rendering)
-            InspektorView  (UML-Karten Darstellung)
+View:       CanvasView          (HTML5 Canvas Rendering, ResizeObserver)
+            InspektorView       (UML-Karten Darstellung)
+            HierarchieView      (Flache Objektliste, linkes Panel)
+            DateienView         (Bild-Asset-Manager, Drag & Drop)
 
-Controller: Controller     (Toolbar, Maus-Interaktion, Tastatur)
-            CodeEditor     (Pseudocode-Parser und -Ausführung)
-            MethodenEditor (Python-Syntax Parser, Block-Interpreter, Methoden-Registrierung)
+Controller: Controller          (Toolbar, Maus-Interaktion, Tastatur)
+            CodeEditor          (Pseudocode-Parser und -Ausführung)
+            MethodenEditor      (Python-Syntax Parser, Block-Interpreter, Methoden-Registrierung)
 ```
 
 **Abhängigkeiten:** Nur [Tailwind CSS](https://tailwindcss.com/) via CDN – kein Build-Schritt, keine weiteren Abhängigkeiten.
@@ -188,4 +216,4 @@ Controller: Controller     (Toolbar, Maus-Interaktion, Tastatur)
 
 ## Version
 
-**v0.2** – Erweiterter Klassen-Editor, Objekte umbenennen, verbesserte Inspektor-Navigation
+**v0.3** – Hierarchie-Panel, Dateien-Panel (IndexedDB), Bild-Asset-Integration im Klassen-Editor

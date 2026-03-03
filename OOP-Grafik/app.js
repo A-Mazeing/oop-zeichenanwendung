@@ -490,7 +490,7 @@ class TextObjekt extends Zeichenobjekt {
 }
 
 
-// --- Subklasse: BildObjekt ---
+// --- Subklasse: BildObjekt (mit OffscreenCanvas-Cache + DateiManager-Aufloesung) ---
 class BildObjekt extends Zeichenobjekt {
     constructor(x = 0, y = 0, breite = 150, hoehe = 150, quelle = "") {
         super(x, y, breite, hoehe);
@@ -500,6 +500,10 @@ class BildObjekt extends Zeichenobjekt {
         this.linienStaerke = 1;
         this._bild = null;
         this._geladen = false;
+        // OffscreenCanvas-Cache fuer performantes Rendering
+        this._cache = null;
+        this._cacheBreite = 0;
+        this._cacheHoehe = 0;
 
         if (quelle) {
             this._ladeBild(quelle);
@@ -507,10 +511,20 @@ class BildObjekt extends Zeichenobjekt {
     }
 
     _ladeBild(url) {
+        // Einfache Dateinamen (z.B. "feuerball.png") ueber DateiManager aufloesen
+        if (_dateiManager && url && !url.startsWith("data:") && !url.startsWith("http") && !url.startsWith("blob:")) {
+            const aufgeloest = _dateiManager.gibDateiUrlSync(url);
+            if (aufgeloest) {
+                url = aufgeloest;
+            }
+        }
+
         this._bild = new Image();
         this._bild.crossOrigin = "anonymous";
         this._bild.onload = () => {
             this._geladen = true;
+            // Cache invalidieren
+            this._cache = null;
             // Seitenverhaeltnis beibehalten wenn noch Standardgroesse (nicht bei gespeicherten Projekten)
             if (!this._groesseFixiert && this.breite === 150 && this.hoehe === 150) {
                 const ratio = this._bild.naturalWidth / this._bild.naturalHeight;
@@ -521,7 +535,7 @@ class BildObjekt extends Zeichenobjekt {
                 }
             }
             this._groesseFixiert = false;
-            // Callback auslösen (z.B. Canvas neu zeichnen)
+            // Callback ausloesen (z.B. Canvas neu zeichnen)
             if (typeof this._onBildGeladen === "function") {
                 this._onBildGeladen();
             }
@@ -534,7 +548,26 @@ class BildObjekt extends Zeichenobjekt {
 
     zeichnen(ctx) {
         if (this._geladen && this._bild) {
-            ctx.drawImage(this._bild, this.x, this.y, this.breite, this.hoehe);
+            const b = Math.round(this.breite);
+            const h = Math.round(this.hoehe);
+            // OffscreenCanvas-Cache: nur neu erzeugen wenn Groesse sich aendert
+            if (!this._cache || this._cacheBreite !== b || this._cacheHoehe !== h) {
+                try {
+                    this._cache = new OffscreenCanvas(b, h);
+                    const cCtx = this._cache.getContext("2d");
+                    cCtx.drawImage(this._bild, 0, 0, b, h);
+                    this._cacheBreite = b;
+                    this._cacheHoehe = h;
+                } catch (e) {
+                    // Fallback falls OffscreenCanvas nicht unterstuetzt
+                    this._cache = null;
+                }
+            }
+            if (this._cache) {
+                ctx.drawImage(this._cache, this.x, this.y);
+            } else {
+                ctx.drawImage(this._bild, this.x, this.y, this.breite, this.hoehe);
+            }
         } else {
             // Platzhalter zeichnen
             ctx.fillStyle = "#f1f5f9";
@@ -570,6 +603,7 @@ class BildObjekt extends Zeichenobjekt {
     setzeQuelle(url) {
         this.quelle = url;
         this._geladen = false;
+        this._cache = null; // Cache invalidieren
         this._ladeBild(url);
     }
 
@@ -610,12 +644,13 @@ class BildObjekt extends Zeichenobjekt {
 }
 
 
-// --- Dokument-Klasse: Verwaltet alle Zeichenobjekte + Events ---
+// --- Dokument-Klasse: Verwaltet alle Zeichenobjekte + Events (rAF-Batching) ---
 class Dokument {
     constructor() {
         this.hintergrundFarbe = "#ffffff";
         this.objekte = [];
         this._listener = [];
+        this._rafId = null; // fuer requestAnimationFrame-Batching
     }
 
     // Observer-Pattern: Listener registrieren
@@ -672,8 +707,21 @@ class Dokument {
         }
     }
 
-    // Benachrichtigung manuell ausloesen (z.B. nach Verschieben)
+    // rAF-gebatchte Benachrichtigung (fuer haeufige Updates wie Drag)
     aktualisieren() {
+        if (this._rafId) return; // Update bereits geplant
+        this._rafId = requestAnimationFrame(() => {
+            this._rafId = null;
+            this._benachrichtigen();
+        });
+    }
+
+    // Sofortige Benachrichtigung (fuer initiales Rendering, Projekt laden etc.)
+    sofortAktualisieren() {
+        if (this._rafId) {
+            cancelAnimationFrame(this._rafId);
+            this._rafId = null;
+        }
         this._benachrichtigen();
     }
 
@@ -737,23 +785,52 @@ class CanvasView {
         this.ctx = canvasElement.getContext("2d");
         this.dokument = dokument;
         this._vorschauObjekt = null;
+        this._resizeRafId = null;
+        this._letzteBreite = 0;
+        this._letzteHoehe = 0;
+        this._letzteDpr = 0;
 
         // Canvas-Groesse an Container anpassen
         this._groesseAnpassen();
-        window.addEventListener("resize", () => this._groesseAnpassen());
+
+        // ResizeObserver: reagiert auf ALLE Layout-Aenderungen des Containers
+        // (Editor ein-/ausklappen, Editor-Resize, Fenster-Resize, etc.)
+        this._resizeObserver = new ResizeObserver(() => this._groesseAnpassenDebounced());
+        this._resizeObserver.observe(this.canvas.parentElement);
+
+        // Fallback: window resize fuer DPI-Aenderungen (Strg+Scrollwheel)
+        window.addEventListener("resize", () => this._groesseAnpassenDebounced());
 
         // Als Beobachter registrieren
         this.dokument.beobachterHinzufuegen(() => this.neuZeichnen());
     }
 
+    // Debounced Resize: buendelt mehrere Resize-Events pro Frame
+    _groesseAnpassenDebounced() {
+        if (this._resizeRafId) return;
+        this._resizeRafId = requestAnimationFrame(() => {
+            this._resizeRafId = null;
+            this._groesseAnpassen();
+        });
+    }
+
     _groesseAnpassen() {
         const parent = this.canvas.parentElement;
         const dpr = window.devicePixelRatio || 1;
-        this.canvas.width = parent.clientWidth * dpr;
-        this.canvas.height = parent.clientHeight * dpr;
+        const breite = parent.clientWidth;
+        const hoehe = parent.clientHeight;
+
+        // Nur neu allokieren wenn sich die Groesse oder DPI tatsaechlich geaendert hat
+        if (breite === this._letzteBreite && hoehe === this._letzteHoehe && dpr === this._letzteDpr) return;
+        this._letzteBreite = breite;
+        this._letzteHoehe = hoehe;
+        this._letzteDpr = dpr;
+
+        this.canvas.width = breite * dpr;
+        this.canvas.height = hoehe * dpr;
         this.ctx.scale(dpr, dpr);
-        this.canvas.style.width = parent.clientWidth + "px";
-        this.canvas.style.height = parent.clientHeight + "px";
+        this.canvas.style.width = breite + "px";
+        this.canvas.style.height = hoehe + "px";
         this.neuZeichnen();
     }
 
@@ -783,9 +860,20 @@ class CanvasView {
         }
     }
 
+    // Leichtgewichtiger Redraw nur fuer Canvas (ohne Observer-Kette)
+    // Wird beim Drag verwendet, um den Inspector-Rebuild zu umgehen
+    _rafNeuZeichnenId = null;
+    nurCanvasNeuZeichnen() {
+        if (this._rafNeuZeichnenId) return;
+        this._rafNeuZeichnenId = requestAnimationFrame(() => {
+            this._rafNeuZeichnenId = null;
+            this.neuZeichnen();
+        });
+    }
+
     setzeVorschau(objekt) {
         this._vorschauObjekt = objekt;
-        this.neuZeichnen();
+        this.nurCanvasNeuZeichnen();
     }
 
     loescheVorschau() {
@@ -807,12 +895,33 @@ class InspektorView {
         this._onObjektUmbenennen = null; // Callback wenn Objekt umbenannt wird: (index, neuerName) => void
         this._eingeklappteObjekte = new Set(); // Merkt sich eingeklappte Objektkarten (nach Name)
         this._eingeklapptDokument = false; // Merkt sich ob Dokument-Karte eingeklappt
+        this._inspektorThrottleTimer = null; // Throttle-Timer fuer Inspector-Updates
+        this._inspektorUpdateAnstehend = false; // Ob ein Update wartet
 
         // Klassenansicht ist statisch – einmal rendern
         this._rendereKlassen();
 
-        // Objektansicht als Beobachter
-        this.dokument.beobachterHinzufuegen(() => this._rendereObjekte());
+        // Objektansicht als Beobachter (mit Throttle)
+        this.dokument.beobachterHinzufuegen(() => this._rendereObjekteGethrottled());
+    }
+
+    // Throttled Inspector-Update: maximal alle 150ms den DOM neu aufbauen
+    _rendereObjekteGethrottled() {
+        if (this._inspektorThrottleTimer) {
+            // Timer laeuft bereits – merken, dass ein Update ansteht
+            this._inspektorUpdateAnstehend = true;
+            return;
+        }
+        // Sofort ausfuehren
+        this._rendereObjekte();
+        // Timer starten – waehrenddessen werden Updates gesammelt
+        this._inspektorThrottleTimer = setTimeout(() => {
+            this._inspektorThrottleTimer = null;
+            if (this._inspektorUpdateAnstehend) {
+                this._inspektorUpdateAnstehend = false;
+                this._rendereObjekte();
+            }
+        }, 150);
     }
 
     setzeKlickHandler(handler) {
@@ -945,9 +1054,9 @@ class InspektorView {
 
         let html = "";
 
-        // Dokument-Instanz immer als Objektkarte anzeigen
+        // Dokument-Karte als HTML vorbereiten (wird spaeter eingefuegt)
         const dokEingeklappt = this._eingeklapptDokument ? " eingeklappt" : "";
-        html += `<div class="uml-karte objekt-karte${dokEingeklappt}" data-objekt-name="dokument1">
+        const dokKarteHtml = `<div class="uml-karte objekt-karte${dokEingeklappt}" data-objekt-name="dokument1">
             <div class="uml-karte-kopf objekt-karte-toggle">
                 dokument1 : Dokument
                 <span class="toggle-pfeil">&#9660;</span>
@@ -967,7 +1076,10 @@ class InspektorView {
             </div>
         </div>`;
 
-        // Zeichenobjekte als Objektkarten (sortiert: ausgewaehlte zuerst)
+        // Ausgewaehlte Objekte zuerst (VOR der Dokument-Karte)
+        let htmlAusgewaehlt = "";
+        let htmlRest = "";
+
         for (const idx of sortiertIndizes) {
             const obj = objekte[idx];
             const name = obj._name || `objekt_${idx}`;
@@ -985,7 +1097,7 @@ class InspektorView {
                 : [];
             const alleMethoden = [...methoden, ...eigeneMethoden];
 
-            html += `<div class="uml-karte objekt-karte${istAusgewaehlt ? " ausgewaehlt" : ""}${istEingeklappt ? " eingeklappt" : ""}" data-objekt-index="${idx}" data-objekt-name="${name}">
+            const karteHtml = `<div class="uml-karte objekt-karte${istAusgewaehlt ? " ausgewaehlt" : ""}${istEingeklappt ? " eingeklappt" : ""}" data-objekt-index="${idx}" data-objekt-name="${name}">
                 <div class="uml-karte-kopf objekt-karte-toggle">
                     ${name} : ${obj.gibTypName()}
                     <span class="toggle-pfeil">&#9660;</span>
@@ -1004,7 +1116,16 @@ class InspektorView {
                     </div>
                 </div>
             </div>`;
+
+            if (istAusgewaehlt) {
+                htmlAusgewaehlt += karteHtml;
+            } else {
+                htmlRest += karteHtml;
+            }
         }
+
+        // Reihenfolge: Ausgewaehlte Objekte -> Dokument-Karte -> Rest
+        html = htmlAusgewaehlt + dokKarteHtml + htmlRest;
 
         this.objektDiv.innerHTML = html;
 
@@ -1143,6 +1264,380 @@ class InspektorView {
 
 
 // ============================================================
+// 3b. DATEIMANAGER – Bilder-Verwaltung mit IndexedDB
+// ============================================================
+
+// Modul-Variable fuer globalen Zugriff aus BildObjekt._ladeBild()
+let _dateiManager = null;
+
+class DateiManager {
+    constructor() {
+        this._db = null;
+        this._cache = new Map(); // name -> { name, mimeType, dataUrl }
+        this._bereit = false;
+        this._onAenderung = null; // Callback bei Aenderungen
+    }
+
+    // Datenbank oeffnen und Cache fuellen
+    async initialisieren() {
+        return new Promise((resolve, reject) => {
+            const anfrage = indexedDB.open("oop-dateien", 1);
+
+            anfrage.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains("bilder")) {
+                    db.createObjectStore("bilder", { keyPath: "name" });
+                }
+            };
+
+            anfrage.onsuccess = async (e) => {
+                this._db = e.target.result;
+                await this._cacheAktualisieren();
+                this._bereit = true;
+                _dateiManager = this;
+                resolve();
+            };
+
+            anfrage.onerror = (e) => {
+                console.error("IndexedDB Fehler:", e.target.error);
+                this._bereit = true;
+                _dateiManager = this;
+                resolve(); // Auch bei Fehler weitermachen (ohne Persistenz)
+            };
+        });
+    }
+
+    // Cache aus IndexedDB fuellen
+    async _cacheAktualisieren() {
+        if (!this._db) return;
+        return new Promise((resolve) => {
+            const tx = this._db.transaction("bilder", "readonly");
+            const store = tx.objectStore("bilder");
+            const anfrage = store.getAll();
+            anfrage.onsuccess = () => {
+                this._cache.clear();
+                for (const datei of anfrage.result) {
+                    this._cache.set(datei.name, datei);
+                }
+                resolve();
+            };
+            anfrage.onerror = () => resolve();
+        });
+    }
+
+    // Datei hinzufuegen (File-Objekt aus Input/Drag&Drop)
+    async dateiHinzufuegen(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = async () => {
+                const datei = {
+                    name: file.name,
+                    mimeType: file.type,
+                    dataUrl: reader.result,
+                    timestamp: Date.now(),
+                };
+                // In Cache speichern
+                this._cache.set(datei.name, datei);
+                // In IndexedDB speichern
+                if (this._db) {
+                    try {
+                        const tx = this._db.transaction("bilder", "readwrite");
+                        tx.objectStore("bilder").put(datei);
+                        await new Promise((r, rej) => {
+                            tx.oncomplete = r;
+                            tx.onerror = () => rej(tx.error);
+                        });
+                    } catch (e) {
+                        console.warn("IDB Schreibfehler:", e);
+                    }
+                }
+                if (this._onAenderung) this._onAenderung();
+                resolve(datei);
+            };
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // Datei loeschen
+    async dateiLoeschen(name) {
+        this._cache.delete(name);
+        if (this._db) {
+            try {
+                const tx = this._db.transaction("bilder", "readwrite");
+                tx.objectStore("bilder").delete(name);
+                await new Promise((r, rej) => {
+                    tx.oncomplete = r;
+                    tx.onerror = () => rej(tx.error);
+                });
+            } catch (e) {
+                console.warn("IDB Loeschfehler:", e);
+            }
+        }
+        if (this._onAenderung) this._onAenderung();
+    }
+
+    // Alle Dateien zurueckgeben (aus Cache)
+    alleDateien() {
+        return Array.from(this._cache.values()).sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    // Synchroner Lookup: Dateiname -> DataURL (fuer BildObjekt._ladeBild)
+    gibDateiUrlSync(name) {
+        const datei = this._cache.get(name);
+        return datei ? datei.dataUrl : null;
+    }
+
+    // Alle Dateien fuer Projekt-JSON exportieren
+    exportiereFuerProjekt() {
+        return this.alleDateien().map(d => ({
+            name: d.name,
+            mimeType: d.mimeType,
+            dataUrl: d.dataUrl,
+        }));
+    }
+
+    // Dateien aus Projekt-JSON importieren (in IDB + Cache)
+    async importiereVonProjekt(dateien) {
+        if (!dateien || !Array.isArray(dateien)) return;
+        for (const d of dateien) {
+            const datei = {
+                name: d.name,
+                mimeType: d.mimeType,
+                dataUrl: d.dataUrl,
+                timestamp: Date.now(),
+            };
+            this._cache.set(datei.name, datei);
+            if (this._db) {
+                try {
+                    const tx = this._db.transaction("bilder", "readwrite");
+                    tx.objectStore("bilder").put(datei);
+                    await new Promise((r, rej) => {
+                        tx.oncomplete = r;
+                        tx.onerror = () => rej(tx.error);
+                    });
+                } catch (e) {
+                    console.warn("IDB Import-Fehler:", e);
+                }
+            }
+        }
+        if (this._onAenderung) this._onAenderung();
+    }
+}
+
+
+// ============================================================
+// 3c. HIERARCHIEVIEW – Flache Objektliste (linkes Panel)
+// ============================================================
+
+class HierarchieView {
+    constructor(listeDiv, dokument) {
+        this.listeDiv = listeDiv;
+        this.dokument = dokument;
+        this._onObjektKlick = null;
+        this._throttleTimer = null;
+        this._updateAnstehend = false;
+
+        // Typ-Icons (SVG-Pfade fuer kleine Symbole)
+        this._typIcons = {
+            Dokument:   { farbe: "#64748b", svg: '<rect x="2" y="2" width="10" height="10" rx="1" fill="currentColor"/>' },
+            Rechteck:   { farbe: "#3b82f6", svg: '<rect x="1" y="3" width="12" height="8" fill="currentColor"/>' },
+            Ellipse:    { farbe: "#8b5cf6", svg: '<ellipse cx="7" cy="7" rx="6" ry="4" fill="currentColor"/>' },
+            Linie:      { farbe: "#ef4444", svg: '<line x1="1" y1="12" x2="13" y2="2" stroke="currentColor" stroke-width="2"/>' },
+            Dreieck:    { farbe: "#f59e0b", svg: '<polygon points="7,1 13,13 1,13" fill="currentColor"/>' },
+            TextObjekt: { farbe: "#10b981", svg: '<text x="2" y="11" font-size="11" fill="currentColor" font-weight="bold">T</text>' },
+            BildObjekt: { farbe: "#ec4899", svg: '<rect x="1" y="2" width="12" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="4.5" cy="5.5" r="1.5" fill="currentColor"/><path d="M1 10l3-3 2.5 2.5L10 6l3 4" stroke="currentColor" stroke-width="1" fill="none"/>' },
+        };
+
+        // Als Beobachter registrieren (mit Throttle)
+        this.dokument.beobachterHinzufuegen(() => this._rendereGethrottled());
+        this._rendere();
+    }
+
+    setzeKlickHandler(handler) {
+        this._onObjektKlick = handler;
+    }
+
+    _rendereGethrottled() {
+        if (this._throttleTimer) {
+            this._updateAnstehend = true;
+            return;
+        }
+        this._rendere();
+        this._throttleTimer = setTimeout(() => {
+            this._throttleTimer = null;
+            if (this._updateAnstehend) {
+                this._updateAnstehend = false;
+                this._rendere();
+            }
+        }, 150);
+    }
+
+    _rendere() {
+        const objekte = this.dokument.alleObjekte();
+        let html = "";
+
+        // Dokument-Eintrag (immer zuerst)
+        const dokIcon = this._typIcons.Dokument;
+        html += `<div class="hierarchie-eintrag h-dokument" data-h-name="dokument1">
+            <svg class="h-icon" viewBox="0 0 14 14" style="color:${dokIcon.farbe}">${dokIcon.svg}</svg>
+            <span class="h-name">dokument1</span>
+            <span class="h-typ">Dok</span>
+        </div>`;
+
+        // Alle Zeichenobjekte
+        for (let i = 0; i < objekte.length; i++) {
+            const obj = objekte[i];
+            const name = obj._name || `objekt_${i}`;
+            const typ = obj.gibTypName();
+            const icon = this._typIcons[typ] || this._typIcons.Rechteck;
+            const ausgewaehlt = obj.ausgewaehlt ? " ausgewaehlt" : "";
+            const kurzTyp = typ.replace("Objekt", "").substring(0, 4);
+
+            html += `<div class="hierarchie-eintrag${ausgewaehlt}" data-h-index="${i}" data-h-name="${name}">
+                <svg class="h-icon" viewBox="0 0 14 14" style="color:${icon.farbe}">${icon.svg}</svg>
+                <span class="h-name">${name}</span>
+                <span class="h-typ">${kurzTyp}</span>
+            </div>`;
+        }
+
+        this.listeDiv.innerHTML = html;
+
+        // Klick-Handler
+        const eintraege = this.listeDiv.querySelectorAll(".hierarchie-eintrag[data-h-index]");
+        eintraege.forEach(el => {
+            el.addEventListener("click", () => {
+                const idx = parseInt(el.dataset.hIndex);
+                if (this._onObjektKlick) this._onObjektKlick(idx);
+            });
+        });
+    }
+}
+
+
+// ============================================================
+// 3d. DATEIENVIEW – Bild-Asset-Verwaltung (linkes Panel)
+// ============================================================
+
+class DateienView {
+    constructor(listeDiv, dateiManager, panelElement) {
+        this.listeDiv = listeDiv;
+        this.dateiManager = dateiManager;
+        this.panelElement = panelElement; // Das Tab-Panel (fuer Drag&Drop-Bereich)
+        this._dropzone = document.getElementById("dateien-dropzone");
+        this._uploadInput = document.getElementById("dateien-upload-input");
+
+        this._initUpload();
+        this._initDragDrop();
+        this._rendere();
+
+        // Bei Aenderungen im DateiManager neu rendern
+        this.dateiManager._onAenderung = () => this._rendere();
+    }
+
+    _initUpload() {
+        this._uploadInput.addEventListener("change", async (e) => {
+            const dateien = Array.from(e.target.files);
+            for (const datei of dateien) {
+                await this.dateiManager.dateiHinzufuegen(datei);
+            }
+            this._uploadInput.value = ""; // Reset
+        });
+    }
+
+    _initDragDrop() {
+        let dragCounter = 0;
+
+        this.panelElement.addEventListener("dragenter", (e) => {
+            e.preventDefault();
+            dragCounter++;
+            this._dropzone.classList.add("sichtbar");
+        });
+
+        this.panelElement.addEventListener("dragleave", (e) => {
+            e.preventDefault();
+            dragCounter--;
+            if (dragCounter <= 0) {
+                dragCounter = 0;
+                this._dropzone.classList.remove("sichtbar");
+            }
+        });
+
+        this.panelElement.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+        });
+
+        this.panelElement.addEventListener("drop", async (e) => {
+            e.preventDefault();
+            dragCounter = 0;
+            this._dropzone.classList.remove("sichtbar");
+
+            const dateien = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/"));
+            for (const datei of dateien) {
+                await this.dateiManager.dateiHinzufuegen(datei);
+            }
+        });
+    }
+
+    _rendere() {
+        const dateien = this.dateiManager.alleDateien();
+
+        if (dateien.length === 0) {
+            this.listeDiv.innerHTML = `<div class="dateien-leer">
+                <svg viewBox="0 0 24 24" class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/>
+                    <path d="M21 15l-5-5L5 21"/>
+                </svg>
+                <span>Noch keine Bilder hochgeladen</span>
+                <span style="color:#cbd5e1">Bilder hierhin ziehen oder Button unten nutzen</span>
+            </div>`;
+            return;
+        }
+
+        let html = "";
+        for (const datei of dateien) {
+            const kurzName = datei.name.length > 18
+                ? datei.name.substring(0, 15) + "..."
+                : datei.name;
+
+            html += `<div class="datei-eintrag" data-datei-name="${this._escapeAttr(datei.name)}" title="${this._escapeAttr(datei.name)}">
+                <img class="datei-thumb" src="${datei.dataUrl}" alt="${this._escapeAttr(datei.name)}">
+                <span class="datei-name">${this._escapeHtml(datei.name)}</span>
+                <button class="datei-loeschen" title="Loeschen" data-loeschen="${this._escapeAttr(datei.name)}">
+                    <svg viewBox="0 0 24 24" class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>`;
+        }
+
+        this.listeDiv.innerHTML = html;
+
+        // Loeschen-Handler
+        this.listeDiv.querySelectorAll(".datei-loeschen").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const name = btn.dataset.loeschen;
+                if (name) await this.dateiManager.dateiLoeschen(name);
+            });
+        });
+    }
+
+    _escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    _escapeAttr(text) {
+        return text.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+}
+
+
+// ============================================================
 // 4. CONTROLLER – Toolbar und Maus-Interaktion
 // ============================================================
 
@@ -1162,6 +1657,7 @@ class Controller {
         this._verschiebeOffsetX = 0;
         this._verschiebeOffsetY = 0;
         this._objektZaehler = { Rechteck: 0, Ellipse: 0, Linie: 0, Dreieck: 0, TextObjekt: 0, BildObjekt: 0 };
+        this._canvasRect = null; // gecachtes BoundingClientRect
 
         this._initToolbar();
         this._initFarbwahl();
@@ -1257,7 +1753,8 @@ class Controller {
     }
 
     _mausPosition(e) {
-        const rect = this.canvasView.canvas.getBoundingClientRect();
+        // Gecachtes Rect verwenden (wird bei mousedown aktualisiert)
+        const rect = this._canvasRect || this.canvasView.canvas.getBoundingClientRect();
         return {
             x: e.clientX - rect.left,
             y: e.clientY - rect.top
@@ -1265,6 +1762,9 @@ class Controller {
     }
 
     _onMouseDown(e) {
+        const canvas = this.canvasView.canvas;
+        // BoundingClientRect bei mousedown cachen (erzwingt sonst Layout-Reflow bei jedem mousemove)
+        this._canvasRect = canvas.getBoundingClientRect();
         const pos = this._mausPosition(e);
         this._istGedruckt = true;
         this._startX = pos.x;
@@ -1291,12 +1791,13 @@ class Controller {
         const pos = this._mausPosition(e);
 
         if (this.aktivesWerkzeug === "auswahl") {
-            // Objekt verschieben
+            // Objekt verschieben – nur Canvas neu zeichnen (kein Inspector-Rebuild)
             if (this._aktuellesObjekt) {
                 const neuesX = pos.x - this._verschiebeOffsetX;
                 const neuesY = pos.y - this._verschiebeOffsetY;
                 this._aktuellesObjekt.setzePosition(neuesX, neuesY);
-                this.dokument.aktualisieren();
+                // Direkter Canvas-Redraw ohne Observer-Kette (schneller Pfad)
+                this.canvasView.nurCanvasNeuZeichnen();
             }
         } else if (this.aktivesWerkzeug === "text") {
             // Kein Vorschau-Objekt fuer Text
@@ -1318,6 +1819,9 @@ class Controller {
         if (!this._istGedruckt) return;
         this._istGedruckt = false;
         const pos = this._mausPosition(e);
+
+        // BoundingClientRect-Cache invalidieren
+        this._canvasRect = null;
 
         this.canvasView.loescheVorschau();
 
@@ -1544,9 +2048,15 @@ class Controller {
 
     _projektLaden(datei) {
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
             try {
                 const daten = JSON.parse(e.target.result);
+
+                // Dateien (Bilder) zuerst importieren, damit BildObjekt._ladeBild() Dateinamen aufloesen kann
+                if (this._onVorProjektLaden) {
+                    await this._onVorProjektLaden(daten);
+                }
+
                 this.dokument.projektLaden(daten);
 
                 // Objekt-Zaehler und Variablen-Registry zuruecksetzen
@@ -1567,7 +2077,7 @@ class Controller {
                     }
                 }
 
-                // Callback: CodeEditor-Sync + MethodenEditor-Daten laden
+                // Callback: CodeEditor-Sync + MethodenEditor-Daten laden (nach projektLaden)
                 if (this._onProjektGeladen) {
                     this._onProjektGeladen(daten);
                 }
@@ -2690,6 +3200,7 @@ class MethodenEditor {
 
     // --- Timer-Funktionen fuer Animationen ---
     // Startet eine wiederholte Ausfuehrung einer eigenen Methode
+    // Nutzt requestAnimationFrame statt setInterval fuer fluessige, Display-synchrone Animation
     // Nutzung aus dem Code-Editor: objekt.starteAnimation(methodenName, intervallMs)
     _registriereTimerMethoden() {
         const klassenMap = { Rechteck, Ellipse, Linie, Dreieck, TextObjekt, BildObjekt };
@@ -2703,24 +3214,38 @@ class MethodenEditor {
                     }
                     // Vorherige Animation stoppen
                     if (this._animationTimer) {
-                        clearInterval(this._animationTimer);
+                        cancelAnimationFrame(this._animationTimer);
+                        this._animationTimer = null;
                     }
-                    this._animationTimer = setInterval(() => {
-                        try {
-                            this[methodenName]();
-                            that.dokument.aktualisieren();
-                        } catch (e) {
-                            clearInterval(this._animationTimer);
-                            that._konsoleFehler(`Animation gestoppt: ${e.message}`);
+
+                    const intervall = intervallMs || 50;
+                    let letzteZeit = performance.now();
+                    const obj = this;
+
+                    const animationsSchritt = (aktuelleZeit) => {
+                        const vergangeneZeit = aktuelleZeit - letzteZeit;
+                        if (vergangeneZeit >= intervall) {
+                            letzteZeit = aktuelleZeit - (vergangeneZeit % intervall);
+                            try {
+                                obj[methodenName]();
+                                that.dokument.aktualisieren();
+                            } catch (e) {
+                                obj._animationTimer = null;
+                                that._konsoleFehler(`Animation gestoppt: ${e.message}`);
+                                return; // Animation bei Fehler beenden
+                            }
                         }
-                    }, intervallMs || 50);
+                        obj._animationTimer = requestAnimationFrame(animationsSchritt);
+                    };
+
+                    this._animationTimer = requestAnimationFrame(animationsSchritt);
                 };
             }
 
             if (!Klasse.prototype.stoppeAnimation) {
                 Klasse.prototype.stoppeAnimation = function () {
                     if (this._animationTimer) {
-                        clearInterval(this._animationTimer);
+                        cancelAnimationFrame(this._animationTimer);
                         this._animationTimer = null;
                     }
                 };
@@ -2784,9 +3309,13 @@ class MethodenEditor {
 // 6. INITIALISIERUNG – Alles zusammenfuegen
 // ============================================================
 
-(function init() {
+(async function init() {
     // --- Model ---
     const dokument = new Dokument();
+
+    // --- DateiManager (vor Views initialisieren, damit BildObjekt darauf zugreifen kann) ---
+    const dateiManager = new DateiManager();
+    await dateiManager.initialisieren();
 
     // --- Views ---
     const canvasElement = document.getElementById("zeichenflaeche");
@@ -2795,6 +3324,36 @@ class MethodenEditor {
     const klassenDiv = document.getElementById("klassenansicht");
     const objektDiv = document.getElementById("objektansicht");
     const inspektorView = new InspektorView(klassenDiv, objektDiv, dokument);
+
+    // --- Linkes Panel: Hierarchie + Dateien ---
+    const hierarchieListe = document.getElementById("hierarchie-liste");
+    const hierarchieView = new HierarchieView(hierarchieListe, dokument);
+
+    const dateienListe = document.getElementById("dateien-liste");
+    const dateienPanel = document.getElementById("lp-tab-dateien");
+    const dateienView = new DateienView(dateienListe, dateiManager, dateienPanel);
+
+    // Tab-Umschaltung
+    (function initLinkesPanelTabs() {
+        const tabs = document.querySelectorAll(".linkes-panel-tab");
+        const inhalte = {
+            hierarchie: document.getElementById("lp-tab-hierarchie"),
+            dateien: document.getElementById("lp-tab-dateien"),
+        };
+
+        tabs.forEach(tab => {
+            tab.addEventListener("click", () => {
+                const ziel = tab.dataset.lpTab;
+                // Alle Tabs deaktivieren
+                tabs.forEach(t => t.classList.remove("aktiv"));
+                // Alle Inhalte verstecken
+                Object.values(inhalte).forEach(el => el.style.display = "none");
+                // Aktiven Tab + Inhalt anzeigen
+                tab.classList.add("aktiv");
+                if (inhalte[ziel]) inhalte[ziel].style.display = "";
+            });
+        });
+    })();
 
     // --- Controller ---
     const controller = new Controller(dokument, canvasView);
@@ -2805,6 +3364,11 @@ class MethodenEditor {
 
     // --- Methoden-Editor ---
     const methodenEditor = new MethodenEditor(dokument, codeEditor, inspektorView, controller);
+
+    // Hierarchie-Klick -> Objekt auf Canvas auswaehlen
+    hierarchieView.setzeKlickHandler((index) => {
+        controller.waehleObjektAus(index);
+    });
 
     // --- Bidirektionale Synchronisation ---
 
@@ -2835,6 +3399,13 @@ class MethodenEditor {
         }
     });
 
+    // Vor Projekt-Laden: Dateien importieren (damit BildObjekt._ladeBild Dateinamen aufloesen kann)
+    controller._onVorProjektLaden = async (daten) => {
+        if (daten && daten.dateien) {
+            await dateiManager.importiereVonProjekt(daten.dateien);
+        }
+    };
+
     // Nach Projekt-Laden: CodeEditor-Variablen neu synchronisieren + MethodenEditor-Daten laden
     controller._onProjektGeladen = (daten) => {
         codeEditor.variablen = { dokument1: dokument };
@@ -2862,6 +3433,9 @@ class MethodenEditor {
         // MethodenEditor-Daten mitspeichern
         daten.methodenEditor = methodenEditor.gibDaten();
 
+        // Dateien (Bilder) aus DateiManager einbetten
+        daten.dateien = dateiManager.exportiereFuerProjekt();
+
         const json = JSON.stringify(daten, null, 2);
         const blob = new Blob([json], { type: "application/json" });
         const url = URL.createObjectURL(blob);
@@ -2878,8 +3452,8 @@ class MethodenEditor {
     // Initial die Cursor-Klasse setzen
     controller._aktualisiereCursor();
 
-    // Initiales Rendering
-    dokument.aktualisieren();
+    // Initiales Rendering (sofort, nicht gebatcht)
+    dokument.sofortAktualisieren();
 
     // --- Editor-Bereich: Resize (Hoehe ziehen) ---
     (function initEditorResize() {
@@ -2906,6 +3480,8 @@ class MethodenEditor {
             const neueHoehe = Math.max(100, Math.min(window.innerHeight * 0.7, startHoehe + diff));
             editorBereich.style.height = neueHoehe + "px";
             editorBereich.style.transition = "none";
+            // Canvas-Groesse waehrend des Ziehens aktualisieren
+            canvasView._groesseAnpassenDebounced();
         });
 
         document.addEventListener("mouseup", () => {
@@ -2915,6 +3491,8 @@ class MethodenEditor {
             document.body.style.cursor = "";
             document.body.style.userSelect = "";
             editorBereich.style.transition = "";
+            // Canvas-Groesse nach dem Ziehen final aktualisieren
+            canvasView._groesseAnpassenDebounced();
         });
     })();
 
@@ -2934,6 +3512,24 @@ class MethodenEditor {
                 gespeicherteHoehe = editorBereich.style.height || editorBereich.offsetHeight + "px";
                 editorBereich.classList.add("eingeklappt");
             }
+            // Canvas-Groesse nach CSS-Transition aktualisieren
+            canvasView._groesseAnpassenDebounced();
+        });
+
+        // Sicherstellen, dass Canvas nach Transition-Ende korrekt resized wird
+        editorBereich.addEventListener("transitionend", () => {
+            canvasView._groesseAnpassenDebounced();
+        });
+    })();
+
+    // --- Inspektor-Sections: Ein-/Ausklappen (Klassen- und Objektansicht) ---
+    (function initInspektorSections() {
+        const sectionHeaders = document.querySelectorAll(".inspektor-section-header");
+        sectionHeaders.forEach(header => {
+            header.addEventListener("click", () => {
+                const bereich = header.parentElement;
+                bereich.classList.toggle("inspektor-section-eingeklappt");
+            });
         });
     })();
 
