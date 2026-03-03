@@ -45,6 +45,10 @@ r1.setzeGroesse(150, 80)
 // Ellipse erstellen
 Ellipse e1 = neu Ellipse(200, 150, 100, 100)
 e1.setzeFarbe("blau")
+
+// Animation starten (eigene Methode nötig, s. Klassen-Editor)
+r1.starteAnimation("bewege", 50)
+r1.stoppeAnimation()
 ```
 
 **Verfügbare Methoden für alle Formen:**
@@ -57,17 +61,30 @@ e1.setzeFarbe("blau")
 | `setzeLinienFarbe(farbe)` | Linienfarbe setzen |
 | `setzeLinienStaerke(n)` | Linienstärke in Pixeln |
 | `setzeGroesse(breite, hoehe)` | Größe ändern (nicht für Linie) |
+| `starteAnimation(methode, ms)` | Eigene Methode wiederholt aufrufen |
+| `stoppeAnimation()` | Laufende Animation stoppen |
 
 **Farbname-Unterstützung:** `rot`, `gruen`, `blau`, `gelb`, `orange`, `lila`, `rosa`, `schwarz`, `weiss`, `grau`, `cyan` u.v.m.
 
 - Code ausführen: **Button „Ausführen"** oder `Strg+Enter`
-- Die Konsole rechts zeigt Ausgaben, Fehler und Erfolg farbig an
+- Die Konsole zeigt Ausgaben, Fehler und Erfolg farbig an
 
 ---
 
 ### Klassen-Editor
 
 Der zweite Tab im Editor-Bereich ermöglicht das Schreiben **eigener Methoden** für die eingebauten Klassen – in Python-ähnlicher Syntax.
+
+Der Klassen-Editor unterstützt:
+
+- `for`-Schleifen: `for i in range(10):` / `for i in range(1, 10, 2):`
+- `while`-Schleifen: `while self.x < 400:`
+- Bedingungen: `if` / `elif` / `else`
+- Lokale Variablen: `ergebnis = self.breite * 2`
+- Ausgabe: `print(self.x)`
+- Eingebaute Funktionen: `abs()`, `min()`, `max()`, `int()`, `float()`, `str()`
+- Boolesche Operatoren: `and` / `or` / `not` (auch `und` / `oder` / `nicht`)
+- Vergleiche: `==`, `!=`, `<`, `>`, `<=`, `>=`
 
 **Beispiel:**
 
@@ -77,8 +94,23 @@ class Rechteck:
     def verdoppleBreite(self):
         self.setzeGroesse(self.breite * 2, self.hoehe)
 
+    def bewege(self):
+        self.verschieben(5, 0)
+        if self.x > 500:
+            self.setzePosition(0, self.y)
+
+    def bewegeMitSchleife(self):
+        for i in range(10):
+            self.verschieben(3, 0)
+
     def zentriere(self, cx, cy):
         self.setzePosition(cx - self.breite / 2, cy - self.hoehe / 2)
+```
+
+**Animation starten** (im Code-Editor):
+```
+r1.starteAnimation("bewege", 50)
+r1.stoppeAnimation()
 ```
 
 - Klasse über das Dropdown auswählen
@@ -94,8 +126,15 @@ class Rechteck:
 Der rechte Bereich zeigt die aktuelle OOP-Struktur als **UML-Diagramm**:
 
 - **Klassenansicht:** UML-Klassenkarten mit Attributen und Methoden (einklappbar)
+  - Die Karte des aktuell ausgewählten Objekttyps erscheint automatisch ganz oben
 - **Objektansicht:** UML-Objektkarten mit Live-Attributwerten, Farbvorschau-Punkten und allen verfügbaren Methoden (einklappbar)
-- Klick auf eine Objektkarte → Objekt wird auf der Zeichenfläche ausgewählt
+  - Das aktuell ausgewählte Objekt erscheint ganz oben
+  - Collapse-Zustände bleiben beim Wechsel der Auswahl erhalten
+- **Klick** auf eine Objektkarte → Objekt wird auf der Zeichenfläche ausgewählt
+- **Doppelklick** auf den Kopf einer Objektkarte → Objekt umbenennen (Inline-Eingabe)
+  - Name wird in allen Views synchronisiert (Inspektor, Code-Editor, Serialisierung)
+  - Validierung: kein Leerzeichen, kein bereits vergebener Name, gültiger Bezeichner
+  - `Enter` bestätigt, `Escape` bricht ab
 - Alle Ansichten synchronisieren sich **bidirektional** (Canvas ↔ Inspektor ↔ Code-Editor)
 
 ---
@@ -120,7 +159,7 @@ Der rechte Bereich zeigt die aktuelle OOP-Struktur als **UML-Diagramm**:
 ```
 index.html   – HTML-Struktur (Layout, Toolbar, Canvas, Inspektor, Editor)
 style.css    – Eigenes CSS (ergänzt Tailwind CSS)
-app.js       – Gesamte Anwendungslogik (~2300 Zeilen)
+app.js       – Gesamte Anwendungslogik (~2700 Zeilen)
 ```
 
 **Architektur (MVC + Observer):**
@@ -140,7 +179,7 @@ View:       CanvasView     (HTML5 Canvas Rendering)
 
 Controller: Controller     (Toolbar, Maus-Interaktion, Tastatur)
             CodeEditor     (Pseudocode-Parser und -Ausführung)
-            MethodenEditor (Python-Syntax Parser, Methoden-Registrierung)
+            MethodenEditor (Python-Syntax Parser, Block-Interpreter, Methoden-Registrierung)
 ```
 
 **Abhängigkeiten:** Nur [Tailwind CSS](https://tailwindcss.com/) via CDN – kein Build-Schritt, keine weiteren Abhängigkeiten.
@@ -149,4 +188,4 @@ Controller: Controller     (Toolbar, Maus-Interaktion, Tastatur)
 
 ## Version
 
-**v0.1** – Initiale Version
+**v0.2** – Erweiterter Klassen-Editor, Objekte umbenennen, verbesserte Inspektor-Navigation
