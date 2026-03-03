@@ -1232,6 +1232,14 @@ class Controller {
             if (e.key === "Delete" || e.key === "Backspace") {
                 const ausgewaehlte = this.dokument.objekte.filter(o => o.ausgewaehlt);
                 for (const obj of ausgewaehlte) {
+                    // Animation stoppen, falls vorhanden
+                    if (typeof obj.stoppeAnimation === "function") {
+                        obj.stoppeAnimation();
+                    }
+                    // Aus CodeEditor-Variablen entfernen
+                    if (obj._name && this._codeEditorRef && this._codeEditorRef.variablen[obj._name]) {
+                        delete this._codeEditorRef.variablen[obj._name];
+                    }
                     this.dokument.entfernen(obj);
                 }
             }
@@ -1661,6 +1669,23 @@ class CodeEditor {
             return this._rufeMethodeAuf(methodenMatch[1], methodenMatch[2], methodenMatch[3], zeilenNr);
         }
 
+        // Pattern 3: Objekt entfernen – "entferne(varName)" oder "entferne("varName")"
+        const entferneMatch = zeile.match(/^entferne\(\s*"?(\w+)"?\s*\)$/);
+        if (entferneMatch) {
+            const varName = entferneMatch[1];
+            const obj = this.variablen[varName];
+            if (!obj || typeof obj !== "object") {
+                throw new Error(`Objekt "${varName}" nicht gefunden. Verfuegbar: ${Object.keys(this.variablen).join(", ")}`);
+            }
+            if (typeof obj.stoppeAnimation === "function") {
+                obj.stoppeAnimation();
+            }
+            delete this.variablen[varName];
+            this.dokument.entfernen(obj);
+            this._konsoleInfo(`"${varName}" wurde entfernt.`);
+            return;
+        }
+
         throw new Error(`Unbekannte Syntax: "${zeile}"`);
     }
 
@@ -1803,10 +1828,11 @@ class CodeEditor {
 // ============================================================
 
 class MethodenEditor {
-    constructor(dokument, codeEditor, inspektorView) {
+    constructor(dokument, codeEditor, inspektorView, controller) {
         this.dokument = dokument;
         this.codeEditor = codeEditor;
         this.inspektorView = inspektorView;
+        this.controller = controller;
 
         // Eigene Methoden pro Klasse: { "RECHTECK": [{name, parameter, koerper}], ... }
         this.eigeneMethoden = {};
@@ -2342,6 +2368,25 @@ class MethodenEditor {
             return;
         }
 
+        // Pattern: varName = TypName(args) — neues Objekt erstellen
+        // z.B. Feuerball = BildObjekt(self.x, self.y, 50, 50, "feuerball.png")
+        const erstellungsMatch = anweisung.match(/^(\w+)\s*=\s*(Rechteck|Ellipse|Linie|Dreieck|TextObjekt|Text|BildObjekt|Bild)\s*\(([^)]*)\)\s*$/);
+        if (erstellungsMatch) {
+            const varName = erstellungsMatch[1];
+            const klassenName = erstellungsMatch[2];
+            const argsStr = erstellungsMatch[3];
+            this._erstelleObjekt(self, varName, klassenName, argsStr, lokaleVars);
+            return;
+        }
+
+        // Pattern: entferne(objName) oder entferne("objName") — Objekt loeschen
+        const entferneMatch = anweisung.match(/^entferne\(\s*"?(\w+)"?\s*\)$/);
+        if (entferneMatch) {
+            const objName = entferneMatch[1];
+            this._entferneObjekt(objName, lokaleVars);
+            return;
+        }
+
         // Pattern: lokale Variable zuweisen: varName = ausdruck
         const varZuweisungMatch = anweisung.match(/^(\w+)\s*=\s*(.+)$/);
         if (varZuweisungMatch) {
@@ -2388,6 +2433,84 @@ class MethodenEditor {
         return argsStr.split(",").map(arg => {
             return this._werteAusdruckAus(self, arg.trim(), lokaleVars);
         });
+    }
+
+    // --- Objekt erstellen aus Klassen-Editor-Methode ---
+    // z.B. Feuerball = BildObjekt(self.x, self.y, 50, 50, "feuerball.png")
+    _erstelleObjekt(self, varName, klassenName, argsStr, lokaleVars) {
+        const klassenMap = {
+            Rechteck: Rechteck,
+            Ellipse: Ellipse,
+            Linie: Linie,
+            Dreieck: Dreieck,
+            Text: TextObjekt,
+            TextObjekt: TextObjekt,
+            Bild: BildObjekt,
+            BildObjekt: BildObjekt,
+        };
+
+        const Klasse = klassenMap[klassenName];
+        if (!Klasse) {
+            throw new Error(`Unbekannte Klasse "${klassenName}". Verfuegbar: ${Object.keys(klassenMap).join(", ")}`);
+        }
+
+        // Argumente auswerten (koennen self.x, lokale Variablen, etc. enthalten)
+        const args = this._parseMethodenArgs(self, argsStr, lokaleVars);
+
+        // Instanz erstellen
+        let obj;
+        try {
+            obj = new Klasse(...args);
+        } catch (e) {
+            throw new Error(`Fehler beim Erstellen von ${klassenName}: ${e.message}`);
+        }
+
+        // Name setzen
+        obj._name = varName;
+
+        // Falls ein Objekt mit diesem Namen schon existiert -> erst entfernen
+        const vorhandenes = this._loeseName(varName, lokaleVars);
+        if (vorhandenes && typeof vorhandenes === "object" && vorhandenes !== self) {
+            // Animation stoppen, falls vorhanden
+            if (typeof vorhandenes.stoppeAnimation === "function") {
+                vorhandenes.stoppeAnimation();
+            }
+            this.dokument.entfernen(vorhandenes);
+        }
+
+        // Im CodeEditor registrieren (damit andere Methoden/Code-Editor darauf zugreifen koennen)
+        if (this.codeEditor) {
+            this.codeEditor.variablen[varName] = obj;
+        }
+
+        // Zum Dokument hinzufuegen (loest Neuzeichnung + Inspektor-Update aus)
+        this.dokument.hinzufuegen(obj);
+
+        this._konsoleInfo(`${varName} = neu ${klassenName}(${argsStr}) erstellt.`);
+    }
+
+    // --- Objekt entfernen aus Klassen-Editor-Methode ---
+    // z.B. entferne(Feuerball) oder entferne("Feuerball")
+    _entferneObjekt(objName, lokaleVars) {
+        const obj = this._loeseName(objName, lokaleVars);
+        if (!obj || typeof obj !== "object") {
+            throw new Error(`Objekt "${objName}" nicht gefunden. Verfuegbar: ${this._verfuegbareNamen(lokaleVars)}`);
+        }
+
+        // Animation stoppen, falls vorhanden
+        if (typeof obj.stoppeAnimation === "function") {
+            obj.stoppeAnimation();
+        }
+
+        // Aus CodeEditor-Variablen entfernen
+        if (this.codeEditor && this.codeEditor.variablen[objName]) {
+            delete this.codeEditor.variablen[objName];
+        }
+
+        // Aus Dokument entfernen
+        this.dokument.entfernen(obj);
+
+        this._konsoleInfo(`"${objName}" wurde entfernt.`);
     }
 
     // --- Bedingung auswerten (gibt Boolean zurueck) ---
@@ -2678,9 +2801,10 @@ class MethodenEditor {
 
     // --- Code-Editor ---
     const codeEditor = new CodeEditor(dokument, controller);
+    controller._codeEditorRef = codeEditor;
 
     // --- Methoden-Editor ---
-    const methodenEditor = new MethodenEditor(dokument, codeEditor, inspektorView);
+    const methodenEditor = new MethodenEditor(dokument, codeEditor, inspektorView, controller);
 
     // --- Bidirektionale Synchronisation ---
 
