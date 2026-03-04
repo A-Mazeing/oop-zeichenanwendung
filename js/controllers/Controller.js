@@ -143,9 +143,13 @@ export class Controller {
                 this._aktuellesObjekt = obj;
                 this._verschiebeOffsetX = pos.x - obj.x;
                 this._verschiebeOffsetY = pos.y - obj.y;
+                // Sofortiger Canvas-Redraw fuer lag-freies Drag-Feedback
+                // (umgeht die schwere Observer-Kette beim ersten Frame)
+                this.canvasView.neuZeichnen();
             } else {
                 this._aktuellesObjekt = null;
             }
+            // Observer-Kette (Inspektor, Hierarchie) asynchron nachziehen
             this.dokument.aktualisieren();
         }
     }

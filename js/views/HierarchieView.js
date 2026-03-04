@@ -62,21 +62,46 @@ export class HierarchieView {
             const ausgewaehlt = obj.ausgewaehlt ? " ausgewaehlt" : "";
             const kurzTyp = typ.replace("Objekt", "").substring(0, 4);
 
+            // Pfeile: nach oben nur wenn nicht erstes, nach unten nur wenn nicht letztes
+            const pfeilHoch = i > 0
+                ? `<button class="h-pfeil h-pfeil-hoch" data-h-move="hoch" data-h-idx="${i}" title="Nach oben (weiter hinten)">&#9650;</button>`
+                : `<span class="h-pfeil h-pfeil-platzhalter"></span>`;
+            const pfeilRunter = i < objekte.length - 1
+                ? `<button class="h-pfeil h-pfeil-runter" data-h-move="runter" data-h-idx="${i}" title="Nach unten (weiter vorne)">&#9660;</button>`
+                : `<span class="h-pfeil h-pfeil-platzhalter"></span>`;
+
             html += `<div class="hierarchie-eintrag${ausgewaehlt}" data-h-index="${i}" data-h-name="${name}">
                 <svg class="h-icon" viewBox="0 0 14 14" style="color:${icon.farbe}">${icon.svg}</svg>
                 <span class="h-name">${name}</span>
                 <span class="h-typ">${kurzTyp}</span>
+                <span class="h-pfeile">${pfeilHoch}${pfeilRunter}</span>
             </div>`;
         }
 
         this.listeDiv.innerHTML = html;
 
-        // Klick-Handler
+        // Klick-Handler fuer Auswahl
         const eintraege = this.listeDiv.querySelectorAll(".hierarchie-eintrag[data-h-index]");
         eintraege.forEach(el => {
-            el.addEventListener("click", () => {
+            el.addEventListener("click", (e) => {
+                // Nicht auswaehlen wenn Pfeil-Button geklickt
+                if (e.target.closest(".h-pfeil")) return;
                 const idx = parseInt(el.dataset.hIndex);
                 if (this._onObjektKlick) this._onObjektKlick(idx);
+            });
+        });
+
+        // Klick-Handler fuer Reihenfolge-Pfeile
+        const pfeile = this.listeDiv.querySelectorAll(".h-pfeil[data-h-move]");
+        pfeile.forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const idx = parseInt(btn.dataset.hIdx);
+                if (btn.dataset.hMove === "hoch") {
+                    this.dokument.verschiebeNachOben(idx);
+                } else {
+                    this.dokument.verschiebeNachUnten(idx);
+                }
             });
         });
     }

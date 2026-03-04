@@ -64,6 +64,24 @@ export class Dokument {
         }
     }
 
+    // Objekt in der Hierarchie nach oben verschieben (naeher zum Hintergrund)
+    verschiebeNachOben(index) {
+        if (index <= 0 || index >= this.objekte.length) return;
+        const tmp = this.objekte[index];
+        this.objekte[index] = this.objekte[index - 1];
+        this.objekte[index - 1] = tmp;
+        this._benachrichtigen();
+    }
+
+    // Objekt in der Hierarchie nach unten verschieben (naeher zum Vordergrund)
+    verschiebeNachUnten(index) {
+        if (index < 0 || index >= this.objekte.length - 1) return;
+        const tmp = this.objekte[index];
+        this.objekte[index] = this.objekte[index + 1];
+        this.objekte[index + 1] = tmp;
+        this._benachrichtigen();
+    }
+
     // rAF-gebatchte Benachrichtigung (fuer haeufige Updates wie Drag)
     aktualisieren() {
         if (this._rafId) return; // Update bereits geplant

@@ -164,6 +164,44 @@
     padding-bottom: 6px;
 }
 
+/* Reihenfolge-Pfeile in der Hierarchie */
+.hierarchie-eintrag .h-pfeile {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    flex-shrink: 0;
+    margin-left: auto;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.hierarchie-eintrag:hover .h-pfeile {
+    opacity: 1;
+}
+
+.hierarchie-eintrag .h-pfeil {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 8px;
+    line-height: 1;
+    padding: 1px 3px;
+    color: #94a3b8;
+    border-radius: 2px;
+    transition: color 0.1s ease, background 0.1s ease;
+}
+
+.hierarchie-eintrag .h-pfeil:hover {
+    color: #1e40af;
+    background: #dbeafe;
+}
+
+.hierarchie-eintrag .h-pfeil-platzhalter {
+    display: inline-block;
+    width: 14px;
+    height: 10px;
+}
+
 /* --- Dateien-Liste --- */
 .datei-eintrag {
     display: flex;
