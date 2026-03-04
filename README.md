@@ -222,4 +222,4 @@ Controller: Controller          (Toolbar, Maus-Interaktion, Tastatur)
 
 ## Version
 
-**v0.4** – Canvas-Zoom (Mausrad) und Pan (mittlere Maustaste), Hierarchie-Reihenfolge mit Pfeiltasten, Inspektor standardmaessig eingeklappt, BildObjekt-Drag-Lag behoben
+**v0.5** – Polygon (regelmäßiges n-Eck), Objekt duplizieren (Strg+D), Resize-Handles, Raster/Grid, Undo/Redo (Strg+Z/Y), Vererbungs-Diagramm, Code-Vorlagen/Snippets

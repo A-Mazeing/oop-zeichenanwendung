@@ -4,6 +4,7 @@ import { Linie } from "../models/Linie.js";
 import { Dreieck } from "../models/Dreieck.js";
 import { TextObjekt } from "../models/TextObjekt.js";
 import { BildObjekt } from "../models/BildObjekt.js";
+import { Polygon } from "../models/Polygon.js";
 
 export class MethodenEditor {
     constructor(dokument, codeEditor, inspektorView, controller) {
@@ -42,6 +43,10 @@ export class MethodenEditor {
             Dreieck: {
                 attribute: { x: 0, y: 0, breite: 100, hoehe: 87, fuellFarbe: '"#3b82f6"', linienFarbe: '"#1e293b"', linienStaerke: 2 },
                 methoden: ["verschieben(dx, dy)", "setzePosition(x, y)", "setzeGroesse(breite, hoehe)", "setzeFarbe(farbe)", "setzeLinienFarbe(farbe)", "setzeLinienStaerke(staerke)", "starteAnimation(methode, intervallMs)", "stoppeAnimation()"],
+            },
+            Polygon: {
+                attribute: { x: 0, y: 0, breite: 100, hoehe: 100, eckenAnzahl: 6, fuellFarbe: '"#3b82f6"', linienFarbe: '"#1e293b"', linienStaerke: 2 },
+                methoden: ["verschieben(dx, dy)", "setzePosition(x, y)", "setzeGroesse(breite, hoehe)", "setzeFarbe(farbe)", "setzeLinienFarbe(farbe)", "setzeLinienStaerke(staerke)", "setzeEckenAnzahl(n)", "starteAnimation(methode, intervallMs)", "stoppeAnimation()"],
             },
             TextObjekt: {
                 attribute: { x: 0, y: 0, inhalt: '"Text"', schriftGroesse: 20, fuellFarbe: '"#1e293b"' },
@@ -301,7 +306,7 @@ export class MethodenEditor {
     _registriereMethoden() {
         // Klassenname -> JS-Klasse zuordnen
         const klassenMap = {
-            Rechteck, Ellipse, Linie, Dreieck, TextObjekt, BildObjekt
+            Rechteck, Ellipse, Linie, Dreieck, Polygon, TextObjekt, BildObjekt
         };
 
         for (const [klassenNameUpper, methoden] of Object.entries(this.eigeneMethoden)) {
@@ -621,6 +626,7 @@ export class MethodenEditor {
             Ellipse: Ellipse,
             Linie: Linie,
             Dreieck: Dreieck,
+            Polygon: Polygon,
             Text: TextObjekt,
             TextObjekt: TextObjekt,
             Bild: BildObjekt,
@@ -871,7 +877,7 @@ export class MethodenEditor {
     // Nutzt requestAnimationFrame statt setInterval fuer fluessige, Display-synchrone Animation
     // Nutzung aus dem Code-Editor: objekt.starteAnimation(methodenName, intervallMs)
     _registriereTimerMethoden() {
-        const klassenMap = { Rechteck, Ellipse, Linie, Dreieck, TextObjekt, BildObjekt };
+        const klassenMap = { Rechteck, Ellipse, Linie, Dreieck, Polygon, TextObjekt, BildObjekt };
         const that = this;
 
         for (const Klasse of Object.values(klassenMap)) {

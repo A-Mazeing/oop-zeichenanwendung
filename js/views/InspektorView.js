@@ -1,5 +1,5 @@
 import { Dokument } from '../models/Dokument.js';
-import { Rechteck, Ellipse, Linie, Dreieck, TextObjekt, BildObjekt } from '../models/shapes.js';
+import { Rechteck, Ellipse, Linie, Dreieck, TextObjekt, BildObjekt, Polygon } from '../models/shapes.js';
 
 export class InspektorView {
     constructor(klassenDiv, objektDiv, dokument) {
@@ -88,6 +88,14 @@ export class InspektorView {
                     "fuellFarbe", "linienFarbe", "linienStaerke",
                 ],
                 methoden: Dreieck.gibMethoden(),
+            },
+            {
+                name: "POLYGON",
+                attribute: [
+                    "x", "y", "breite", "hoehe", "eckenAnzahl",
+                    "fuellFarbe", "linienFarbe", "linienStaerke",
+                ],
+                methoden: Polygon.gibMethoden(),
             },
             {
                 name: "TEXTOBJEKT",

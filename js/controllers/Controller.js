@@ -4,6 +4,8 @@ import { Linie } from "../models/Linie.js";
 import { Dreieck } from "../models/Dreieck.js";
 import { TextObjekt } from "../models/TextObjekt.js";
 import { BildObjekt } from "../models/BildObjekt.js";
+import { Polygon } from "../models/Polygon.js";
+import { vonJSON } from "../models/shapes.js";
 
 export class Controller {
     constructor(dokument, canvasView) {
@@ -20,7 +22,7 @@ export class Controller {
         this._aktuellesObjekt = null; // beim Verschieben
         this._verschiebeOffsetX = 0;
         this._verschiebeOffsetY = 0;
-        this._objektZaehler = { Rechteck: 0, Ellipse: 0, Linie: 0, Dreieck: 0, TextObjekt: 0, BildObjekt: 0 };
+                this._objektZaehler = { Rechteck: 0, Ellipse: 0, Linie: 0, Dreieck: 0, Polygon: 0, TextObjekt: 0, BildObjekt: 0 };
         this._canvasRect = null; // gecachtes BoundingClientRect
 
         // Pan-Zustand (mittlere Maustaste)
@@ -30,11 +32,18 @@ export class Controller {
         this._panStartVerschiebungX = 0;
         this._panStartVerschiebungY = 0;
 
+        // Resize-Zustand (Skalierung ueber Handles)
+        this._istAmSkalieren = false;
+        this._skalierEcke = null; // "tl", "tr", "bl", "br"
+        this._skalierObjekt = null;
+        this._skalierStartBB = null; // Anfangs-BoundingBox {x, y, b, h}
+
         this._initToolbar();
         this._initFarbwahl();
         this._initMausEvents();
         this._initTastaturKuerzel();
         this._initProjektButtons();
+        this._initRasterToggle();
     }
 
     // --- Toolbar-Buttons ---
@@ -85,7 +94,7 @@ export class Controller {
 
             const kuerzel = {
                 v: "auswahl", r: "rechteck", e: "ellipse",
-                l: "linie", d: "dreieck", t: "text", b: "bild"
+                l: "linie", d: "dreieck", p: "polygon", t: "text", b: "bild"
             };
             if (kuerzel[e.key.toLowerCase()]) {
                 this.aktivesWerkzeug = kuerzel[e.key.toLowerCase()];
@@ -109,6 +118,29 @@ export class Controller {
                     }
                     this.dokument.entfernen(obj);
                 }
+            }
+
+            // Strg+D: ausgewaehltes Objekt duplizieren
+            if (e.ctrlKey && e.key.toLowerCase() === "d") {
+                e.preventDefault();
+                this._duplizieren();
+            }
+
+            // G: Raster ein-/ausschalten
+            if (e.key.toLowerCase() === "g" && !e.ctrlKey && !e.altKey) {
+                this._toggleRaster();
+            }
+
+            // Strg+Z: Undo
+            if (e.ctrlKey && e.key.toLowerCase() === "z" && !e.shiftKey) {
+                e.preventDefault();
+                if (this._undoManager) this._undoManager.undo();
+            }
+
+            // Strg+Y / Strg+Shift+Z: Redo
+            if (e.ctrlKey && (e.key.toLowerCase() === "y" || (e.shiftKey && e.key.toLowerCase() === "z"))) {
+                e.preventDefault();
+                if (this._undoManager) this._undoManager.redo();
             }
         });
     }
@@ -174,6 +206,19 @@ export class Controller {
         this._startY = pos.y;
 
         if (this.aktivesWerkzeug === "auswahl") {
+            // Zuerst pruefen ob ein Resize-Handle geklickt wurde
+            const handle = this._findeHandle(pos.x, pos.y);
+            if (handle) {
+                this._istAmSkalieren = true;
+                this._skalierEcke = handle.ecke;
+                this._skalierObjekt = handle.objekt;
+                const bb = handle.objekt.gibBoundingBox();
+                this._skalierStartBB = { x: bb.x, y: bb.y, b: bb.b, h: bb.h };
+                this._startX = pos.x;
+                this._startY = pos.y;
+                return;
+            }
+
             // Objekt unter dem Cursor finden
             const obj = this.dokument.objektAnPosition(pos.x, pos.y);
             this.dokument.alleAbwaehlen();
@@ -199,6 +244,14 @@ export class Controller {
             const screenPos = this._mausPositionBildschirm(e);
             this.canvasView.verschiebungX = this._panStartVerschiebungX + (screenPos.x - this._panStartX);
             this.canvasView.verschiebungY = this._panStartVerschiebungY + (screenPos.y - this._panStartY);
+            this.canvasView.nurCanvasNeuZeichnen();
+            return;
+        }
+
+        // Resize-Handle ziehen
+        if (this._istAmSkalieren) {
+            const pos = this._mausPosition(e);
+            this._skaliere(pos.x, pos.y);
             this.canvasView.nurCanvasNeuZeichnen();
             return;
         }
@@ -237,6 +290,17 @@ export class Controller {
             this._istPanning = false;
             this.canvasView.canvas.style.cursor = "";
             this._canvasRect = null;
+            return;
+        }
+
+        // Resize beenden
+        if (this._istAmSkalieren) {
+            this._istAmSkalieren = false;
+            this._skalierEcke = null;
+            this._skalierObjekt = null;
+            this._skalierStartBB = null;
+            this._canvasRect = null;
+            this.dokument.aktualisieren();
             return;
         }
 
@@ -332,6 +396,9 @@ export class Controller {
                 break;
             case "dreieck":
                 obj = new Dreieck(x, y, breite, hoehe);
+                break;
+            case "polygon":
+                obj = new Polygon(x, y, breite, hoehe, 6);
                 break;
             default:
                 return null;
@@ -507,7 +574,7 @@ export class Controller {
                 this.dokument.projektLaden(daten);
 
                 // Objekt-Zaehler und Variablen-Registry zuruecksetzen
-                this._objektZaehler = { Rechteck: 0, Ellipse: 0, Linie: 0, Dreieck: 0, TextObjekt: 0, BildObjekt: 0 };
+        this._objektZaehler = { Rechteck: 0, Ellipse: 0, Linie: 0, Dreieck: 0, Polygon: 0, TextObjekt: 0, BildObjekt: 0 };
 
                 for (const obj of this.dokument.objekte) {
                     const typ = obj.gibTypName();
@@ -540,6 +607,83 @@ export class Controller {
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}_${String(d.getHours()).padStart(2, "0")}-${String(d.getMinutes()).padStart(2, "0")}`;
     }
 
+    // --- Resize-Handles ---
+
+    // Prüft ob ein Punkt auf einem Handle eines ausgewaehlten Objekts liegt
+    _findeHandle(px, py) {
+        const handleGroesse = 8 / this.canvasView.zoomFaktor; // Handle-Groesse in Welt-Koordinaten
+        for (let i = this.dokument.objekte.length - 1; i >= 0; i--) {
+            const obj = this.dokument.objekte[i];
+            if (!obj.ausgewaehlt) continue;
+            const bb = obj.gibBoundingBox();
+            const ecken = [
+                { ecke: "tl", x: bb.x, y: bb.y },
+                { ecke: "tr", x: bb.x + bb.b, y: bb.y },
+                { ecke: "bl", x: bb.x, y: bb.y + bb.h },
+                { ecke: "br", x: bb.x + bb.b, y: bb.y + bb.h },
+            ];
+            for (const e of ecken) {
+                if (Math.abs(px - e.x) <= handleGroesse && Math.abs(py - e.y) <= handleGroesse) {
+                    return { ecke: e.ecke, objekt: obj };
+                }
+            }
+        }
+        return null;
+    }
+
+    // Skaliert das Objekt basierend auf der gezogenen Ecke
+    _skaliere(px, py) {
+        const obj = this._skalierObjekt;
+        const bb = this._skalierStartBB;
+        const ecke = this._skalierEcke;
+        if (!obj || !bb) return;
+
+        const minGroesse = 10;
+
+        // Fuer Linien: Endpunkte direkt verschieben
+        if (obj.gibTypName() === "Linie") {
+            if (ecke === "tl") {
+                obj.x = px;
+                obj.y = py;
+            } else if (ecke === "br") {
+                obj.x2 = px;
+                obj.y2 = py;
+            } else if (ecke === "tr") {
+                obj.x2 = px;
+                obj.y = py;
+            } else if (ecke === "bl") {
+                obj.x = px;
+                obj.y2 = py;
+            }
+            return;
+        }
+
+        let neuesX = obj.x, neuesY = obj.y, neueBreite = obj.breite, neueHoehe = obj.hoehe;
+
+        if (ecke === "br") {
+            neueBreite = Math.max(minGroesse, px - bb.x);
+            neueHoehe = Math.max(minGroesse, py - bb.y);
+        } else if (ecke === "bl") {
+            neueBreite = Math.max(minGroesse, (bb.x + bb.b) - px);
+            neueHoehe = Math.max(minGroesse, py - bb.y);
+            neuesX = Math.min(px, bb.x + bb.b - minGroesse);
+        } else if (ecke === "tr") {
+            neueBreite = Math.max(minGroesse, px - bb.x);
+            neueHoehe = Math.max(minGroesse, (bb.y + bb.h) - py);
+            neuesY = Math.min(py, bb.y + bb.h - minGroesse);
+        } else if (ecke === "tl") {
+            neueBreite = Math.max(minGroesse, (bb.x + bb.b) - px);
+            neueHoehe = Math.max(minGroesse, (bb.y + bb.h) - py);
+            neuesX = Math.min(px, bb.x + bb.b - minGroesse);
+            neuesY = Math.min(py, bb.y + bb.h - minGroesse);
+        }
+
+        obj.x = neuesX;
+        obj.y = neuesY;
+        obj.breite = neueBreite;
+        obj.hoehe = neueHoehe;
+    }
+
     // Wird vom Inspektor aufgerufen, wenn ein Objekt geklickt wird
     waehleObjektAus(index) {
         this.dokument.alleAbwaehlen();
@@ -548,5 +692,54 @@ export class Controller {
             obj.ausgewaehlt = true;
         }
         this.dokument.aktualisieren();
+    }
+
+    // Ausgewaehltes Objekt duplizieren (Strg+D)
+    _duplizieren() {
+        const ausgewaehlte = this.dokument.objekte.filter(o => o.ausgewaehlt);
+        if (ausgewaehlte.length === 0) return;
+
+        this.dokument.alleAbwaehlen();
+
+        for (const obj of ausgewaehlte) {
+            // Objekt serialisieren und neu erstellen
+            const json = obj.zuJSON();
+            json.x += 20;
+            json.y += 20;
+            // Bei Linien auch Endpunkt verschieben
+            if (json.x2 !== undefined) json.x2 += 20;
+            if (json.y2 !== undefined) json.y2 += 20;
+
+            const duplikat = vonJSON(json);
+
+            // Neuen Namen generieren
+            const typ = duplikat.gibTypName();
+            this._objektZaehler[typ] = (this._objektZaehler[typ] || 0) + 1;
+            const prefix = typ.charAt(0).toLowerCase();
+            duplikat._name = `${prefix}${this._objektZaehler[typ]}`;
+
+            duplikat.ausgewaehlt = true;
+            this.dokument.hinzufuegen(duplikat);
+        }
+    }
+
+    // --- Raster-Toggle ---
+    _initRasterToggle() {
+        const btn = document.getElementById("raster-toggle-btn");
+        if (btn) {
+            btn.addEventListener("click", () => this._toggleRaster());
+        }
+    }
+
+    _toggleRaster() {
+        const aktiv = this.canvasView.rasterUmschalten();
+        const btn = document.getElementById("raster-toggle-btn");
+        if (btn) {
+            if (aktiv) {
+                btn.classList.add("aktiv");
+            } else {
+                btn.classList.remove("aktiv");
+            }
+        }
     }
 }

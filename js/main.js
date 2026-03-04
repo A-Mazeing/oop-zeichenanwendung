@@ -1,5 +1,6 @@
 import { Dokument } from "./models/Dokument.js";
 import { DateiManager, setDateiManager } from "./services/DateiManager.js";
+import { UndoManager } from "./services/UndoManager.js";
 import { CanvasView } from "./views/CanvasView.js";
 import { InspektorView } from "./views/InspektorView.js";
 import { HierarchieView } from "./views/HierarchieView.js";
@@ -33,11 +34,17 @@ import { MethodenEditor } from "./editors/MethodenEditor.js";
     const dateienPanel = document.getElementById("lp-tab-dateien");
     const dateienView = new DateienView(dateienListe, dateiManager, dateienPanel);
 
+    // Vererbungs-Diagramm
+    const { VererbungsView } = await import("./views/VererbungsView.js");
+    const vererbungBaum = document.getElementById("vererbung-baum");
+    const vererbungsView = new VererbungsView(vererbungBaum);
+
     // Tab-Umschaltung
     (function initLinkesPanelTabs() {
         const tabs = document.querySelectorAll(".linkes-panel-tab");
         const inhalte = {
             hierarchie: document.getElementById("lp-tab-hierarchie"),
+            vererbung: document.getElementById("lp-tab-vererbung"),
             dateien: document.getElementById("lp-tab-dateien"),
         };
 
@@ -58,12 +65,68 @@ import { MethodenEditor } from "./editors/MethodenEditor.js";
     // --- Controller ---
     const controller = new Controller(dokument, canvasView);
 
+    // --- Undo/Redo ---
+    const undoManager = new UndoManager(dokument);
+    controller._undoManager = undoManager;
+
+    // Nach jeder Dokumentaenderung einen Snapshot erstellen
+    dokument.beobachterHinzufuegen(() => {
+        undoManager.snapshot();
+    });
+
     // --- Code-Editor ---
     const codeEditor = new CodeEditor(dokument, controller);
     controller._codeEditorRef = codeEditor;
 
     // --- Methoden-Editor ---
     const methodenEditor = new MethodenEditor(dokument, codeEditor, inspektorView, controller);
+
+    // --- Code-Vorlagen ---
+    (async function initVorlagen() {
+        const { VORLAGEN } = await import("./services/CodeVorlagen.js");
+        const vorlagenBtn = document.getElementById("vorlagen-btn");
+        const vorlagenDropdown = document.getElementById("vorlagen-dropdown");
+
+        if (!vorlagenBtn || !vorlagenDropdown) return;
+
+        // Dropdown ein-/ausblenden
+        vorlagenBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const sichtbar = vorlagenDropdown.style.display !== "none";
+            vorlagenDropdown.style.display = sichtbar ? "none" : "";
+        });
+
+        // Klick ausserhalb schliesst Dropdown
+        document.addEventListener("click", () => {
+            vorlagenDropdown.style.display = "none";
+        });
+
+        // Vorlage einfuegen
+        vorlagenDropdown.addEventListener("click", (e) => {
+            const btn = e.target.closest("[data-vorlage]");
+            if (!btn) return;
+            const key = btn.dataset.vorlage;
+            const vorlage = VORLAGEN[key];
+            if (!vorlage) return;
+
+            // Code in Editor einsetzen
+            const editorEl = document.getElementById("code-editor");
+            if (editorEl) {
+                editorEl.value = vorlage.code;
+            }
+
+            // Dropdown schliessen
+            vorlagenDropdown.style.display = "none";
+
+            // Zum Code-Tab wechseln
+            const codeTabs = document.querySelectorAll(".editor-tab");
+            codeTabs.forEach(t => t.classList.remove("aktiv"));
+            const codeTab = document.querySelector('[data-tab="code"]');
+            if (codeTab) codeTab.classList.add("aktiv");
+            document.getElementById("tab-code").style.display = "";
+            document.getElementById("tab-klassen").style.display = "none";
+        });
+    })();
 
     // Hierarchie-Klick -> Objekt auf Canvas auswaehlen
     hierarchieView.setzeKlickHandler((index) => {
@@ -118,6 +181,8 @@ import { MethodenEditor } from "./editors/MethodenEditor.js";
         if (daten && daten.methodenEditor) {
             methodenEditor.ladeDaten(daten.methodenEditor);
         }
+        // Undo-Stack zuruecksetzen
+        undoManager.zuruecksetzen();
     };
 
     // MethodenEditor-Daten beim Speichern einbinden (ueberschreibt Controller._projektSpeichern)

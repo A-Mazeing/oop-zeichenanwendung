@@ -4,6 +4,7 @@ import { Linie } from "../models/Linie.js";
 import { Dreieck } from "../models/Dreieck.js";
 import { TextObjekt } from "../models/TextObjekt.js";
 import { BildObjekt } from "../models/BildObjekt.js";
+import { Polygon } from "../models/Polygon.js";
 
 export class CodeEditor {
     constructor(dokument, controller) {
@@ -102,6 +103,7 @@ export class CodeEditor {
             Ellipse: Ellipse,
             Linie: Linie,
             Dreieck: Dreieck,
+            Polygon: Polygon,
             Text: TextObjekt,
             TextObjekt: TextObjekt,
             Bild: BildObjekt,

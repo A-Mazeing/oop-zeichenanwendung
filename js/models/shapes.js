@@ -10,11 +10,12 @@ import { Linie } from './Linie.js';
 import { Dreieck } from './Dreieck.js';
 import { TextObjekt } from './TextObjekt.js';
 import { BildObjekt } from './BildObjekt.js';
+import { Polygon } from './Polygon.js';
 
 // Deserialisierung: Aus JSON-Daten ein Zeichenobjekt erstellen
 export function vonJSON(daten) {
     const klassenMap = {
-        Rechteck, Ellipse, Linie, Dreieck, TextObjekt, BildObjekt
+        Rechteck, Ellipse, Linie, Dreieck, TextObjekt, BildObjekt, Polygon
     };
     const Klasse = klassenMap[daten.typ];
     if (!Klasse) throw new Error(`Unbekannter Typ: ${daten.typ}`);
@@ -32,6 +33,8 @@ export function vonJSON(daten) {
         obj._groesseFixiert = true;
         // Quelle merken, wird spaeter geladen
         obj._gespeicherteQuelle = daten.quelle || "";
+    } else if (daten.typ === "Polygon") {
+        obj = new Polygon(daten.x, daten.y, daten.breite, daten.hoehe, daten.eckenAnzahl || 6);
     } else {
         obj = new Klasse(daten.x, daten.y, daten.breite, daten.hoehe);
     }
@@ -43,4 +46,4 @@ export function vonJSON(daten) {
     return obj;
 }
 
-export { Zeichenobjekt, Rechteck, Ellipse, Linie, Dreieck, TextObjekt, BildObjekt };
+export { Zeichenobjekt, Rechteck, Ellipse, Linie, Dreieck, TextObjekt, BildObjekt, Polygon };

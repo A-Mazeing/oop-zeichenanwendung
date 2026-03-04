@@ -64,6 +64,7 @@
 .canvas-bereich.werkzeug-rechteck #zeichenflaeche,
 .canvas-bereich.werkzeug-ellipse #zeichenflaeche,
 .canvas-bereich.werkzeug-dreieck #zeichenflaeche,
+.canvas-bereich.werkzeug-polygon #zeichenflaeche,
 .canvas-bereich.werkzeug-text #zeichenflaeche,
 .canvas-bereich.werkzeug-bild #zeichenflaeche {
     cursor: crosshair;
@@ -689,4 +690,142 @@
     display: flex;
     gap: 8px;
     justify-content: flex-end;
+}
+
+/* --- Vererbungs-Diagramm --- */
+.vererbung-knoten {
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.vererbung-kopf {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 4px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.1s ease;
+    user-select: none;
+}
+
+.vererbung-kopf:hover {
+    background: #f1f5f9;
+}
+
+.vererbung-pfeil {
+    font-size: 8px;
+    width: 12px;
+    text-align: center;
+    color: #94a3b8;
+    flex-shrink: 0;
+}
+
+.vererbung-name {
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.vererbung-kopf.abstrakt .vererbung-name {
+    font-style: italic;
+    color: #64748b;
+}
+
+.vererbung-farb-punkt {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 1px solid rgba(0,0,0,0.1);
+}
+
+.vererbung-details {
+    padding: 2px 0 4px;
+}
+
+.vererbung-section-label {
+    font-size: 9px;
+    font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 4px;
+    margin-bottom: 1px;
+}
+
+.vererbung-zeile {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 10px;
+    color: #475569;
+    padding: 0 0 0 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.vererbung-zeile.abstrakt {
+    font-style: italic;
+    color: #94a3b8;
+}
+
+.vererbung-attr {
+    color: #0369a1;
+}
+
+.vererbung-meth {
+    color: #15803d;
+}
+
+.vererbung-verbindung {
+    font-size: 10px;
+    color: #cbd5e1;
+    padding: 1px 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.vererbung-linie {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    color: #cbd5e1;
+}
+
+.vererbung-verb-text {
+    font-size: 9px;
+    color: #94a3b8;
+    font-style: italic;
+}
+
+/* --- Code-Vorlagen Dropdown --- */
+.vorlagen-dropdown {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    margin-bottom: 4px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    min-width: 150px;
+    padding: 4px;
+    z-index: 50;
+}
+
+.vorlagen-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 6px 10px;
+    font-size: 12px;
+    color: #334155;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.1s ease;
+}
+
+.vorlagen-item:hover {
+    background: #e0f2fe;
+    color: #0369a1;
 }
