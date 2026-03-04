@@ -9,6 +9,11 @@ export class CanvasView {
         this._letzteHoehe = 0;
         this._letzteDpr = 0;
 
+        // Zoom- und Pan-Zustand
+        this.zoomFaktor = 1;
+        this.verschiebungX = 0;
+        this.verschiebungY = 0;
+
         // Canvas-Groesse an Container anpassen
         this._groesseAnpassen();
 
@@ -55,12 +60,20 @@ export class CanvasView {
 
     neuZeichnen() {
         const ctx = this.ctx;
-        const w = this.canvas.width / (window.devicePixelRatio || 1);
-        const h = this.canvas.height / (window.devicePixelRatio || 1);
+        const dpr = window.devicePixelRatio || 1;
+        const w = this.canvas.width / dpr;
+        const h = this.canvas.height / dpr;
 
-        // Hintergrund
+        // Alles zuruecksetzen (DPR-Skalierung neu anwenden)
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        // Hintergrund (vor Zoom/Pan, fuellt gesamten Canvas)
         ctx.fillStyle = this.dokument.hintergrundFarbe;
         ctx.fillRect(0, 0, w, h);
+
+        // Zoom + Pan anwenden
+        ctx.translate(this.verschiebungX, this.verschiebungY);
+        ctx.scale(this.zoomFaktor, this.zoomFaktor);
 
         // Alle Objekte zeichnen
         for (const obj of this.dokument.objekte) {
@@ -97,5 +110,13 @@ export class CanvasView {
 
     loescheVorschau() {
         this._vorschauObjekt = null;
+    }
+
+    // Bildschirm-Koordinaten (relativ zum Canvas) in Welt-Koordinaten umrechnen
+    bildschirmZuWelt(screenX, screenY) {
+        return {
+            x: (screenX - this.verschiebungX) / this.zoomFaktor,
+            y: (screenY - this.verschiebungY) / this.zoomFaktor,
+        };
     }
 }

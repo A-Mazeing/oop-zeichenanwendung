@@ -181,10 +181,16 @@ Der rechte Bereich zeigt die aktuelle OOP-Struktur als **UML-Diagramm**:
 ## Technischer Aufbau
 
 ```
-OOP-Grafik/
-├── index.html   – HTML-Struktur (Layout, Toolbar, linkes Panel, Canvas, Inspektor, Editor)
-├── style.css    – Eigenes CSS (ergänzt Tailwind CSS)
-└── app.js       – Gesamte Anwendungslogik (~3500 Zeilen)
+OOP-Zeichenanwendung/
+├── index.html          – HTML-Struktur (Layout, Toolbar, Panels, Canvas, Inspektor, Editor)
+├── style.css           – Eigenes CSS (ergänzt Tailwind CSS)
+└── js/
+    ├── main.js         – Einstiegspunkt, Initialisierung aller Module
+    ├── models/         – Zeichenobjekt, Rechteck, Ellipse, Linie, Dreieck, TextObjekt, BildObjekt, Dokument
+    ├── views/          – CanvasView, InspektorView, HierarchieView, DateienView
+    ├── controllers/    – Controller (Toolbar, Maus, Tastatur, Zoom/Pan)
+    ├── editors/        – CodeEditor, MethodenEditor
+    └── services/       – DateiManager (IndexedDB)
 ```
 
 **Architektur (MVC + Observer):**
@@ -216,4 +222,4 @@ Controller: Controller          (Toolbar, Maus-Interaktion, Tastatur)
 
 ## Version
 
-**v0.3** – Hierarchie-Panel, Dateien-Panel (IndexedDB), Bild-Asset-Integration im Klassen-Editor
+**v0.4** – Canvas-Zoom (Mausrad) und Pan (mittlere Maustaste), Hierarchie-Reihenfolge mit Pfeiltasten, Inspektor standardmaessig eingeklappt, BildObjekt-Drag-Lag behoben

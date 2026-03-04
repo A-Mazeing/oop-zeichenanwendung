@@ -23,6 +23,13 @@ export class Controller {
         this._objektZaehler = { Rechteck: 0, Ellipse: 0, Linie: 0, Dreieck: 0, TextObjekt: 0, BildObjekt: 0 };
         this._canvasRect = null; // gecachtes BoundingClientRect
 
+        // Pan-Zustand (mittlere Maustaste)
+        this._istPanning = false;
+        this._panStartX = 0;
+        this._panStartY = 0;
+        this._panStartVerschiebungX = 0;
+        this._panStartVerschiebungY = 0;
+
         this._initToolbar();
         this._initFarbwahl();
         this._initMausEvents();
@@ -114,14 +121,29 @@ export class Controller {
         canvas.addEventListener("mousemove", (e) => this._onMouseMove(e));
         canvas.addEventListener("mouseup", (e) => this._onMouseUp(e));
         canvas.addEventListener("mouseleave", (e) => this._onMouseUp(e));
+
+        // Mausrad: Zoom
+        canvas.addEventListener("wheel", (e) => this._onWheel(e), { passive: false });
+
+        // Mittlere Maustaste: Standard-Browser-Scrolling verhindern
+        canvas.addEventListener("auxclick", (e) => { if (e.button === 1) e.preventDefault(); });
     }
 
     _mausPosition(e) {
         // Gecachtes Rect verwenden (wird bei mousedown aktualisiert)
         const rect = this._canvasRect || this.canvasView.canvas.getBoundingClientRect();
+        const screenX = e.clientX - rect.left;
+        const screenY = e.clientY - rect.top;
+        // Bildschirm-Koordinaten in Welt-Koordinaten umrechnen (Zoom + Pan)
+        return this.canvasView.bildschirmZuWelt(screenX, screenY);
+    }
+
+    // Reine Bildschirm-Koordinaten (ohne Zoom/Pan, fuer Pan-Logik)
+    _mausPositionBildschirm(e) {
+        const rect = this._canvasRect || this.canvasView.canvas.getBoundingClientRect();
         return {
             x: e.clientX - rect.left,
-            y: e.clientY - rect.top
+            y: e.clientY - rect.top,
         };
     }
 
@@ -129,6 +151,23 @@ export class Controller {
         const canvas = this.canvasView.canvas;
         // BoundingClientRect bei mousedown cachen (erzwingt sonst Layout-Reflow bei jedem mousemove)
         this._canvasRect = canvas.getBoundingClientRect();
+
+        // Mittlere Maustaste (button=1): Pan starten
+        if (e.button === 1) {
+            e.preventDefault();
+            this._istPanning = true;
+            const screenPos = this._mausPositionBildschirm(e);
+            this._panStartX = screenPos.x;
+            this._panStartY = screenPos.y;
+            this._panStartVerschiebungX = this.canvasView.verschiebungX;
+            this._panStartVerschiebungY = this.canvasView.verschiebungY;
+            canvas.style.cursor = "grabbing";
+            return;
+        }
+
+        // Nur linke Maustaste (button=0) fuer normale Interaktion
+        if (e.button !== 0) return;
+
         const pos = this._mausPosition(e);
         this._istGedruckt = true;
         this._startX = pos.x;
@@ -155,6 +194,15 @@ export class Controller {
     }
 
     _onMouseMove(e) {
+        // Pan mit mittlerer Maustaste
+        if (this._istPanning) {
+            const screenPos = this._mausPositionBildschirm(e);
+            this.canvasView.verschiebungX = this._panStartVerschiebungX + (screenPos.x - this._panStartX);
+            this.canvasView.verschiebungY = this._panStartVerschiebungY + (screenPos.y - this._panStartY);
+            this.canvasView.nurCanvasNeuZeichnen();
+            return;
+        }
+
         if (!this._istGedruckt) return;
         const pos = this._mausPosition(e);
 
@@ -184,6 +232,14 @@ export class Controller {
     }
 
     _onMouseUp(e) {
+        // Pan beenden
+        if (this._istPanning) {
+            this._istPanning = false;
+            this.canvasView.canvas.style.cursor = "";
+            this._canvasRect = null;
+            return;
+        }
+
         if (!this._istGedruckt) return;
         this._istGedruckt = false;
         const pos = this._mausPosition(e);
@@ -237,6 +293,29 @@ export class Controller {
                 this.dokument.hinzufuegen(neuesObjekt);
             }
         }
+    }
+
+    _onWheel(e) {
+        e.preventDefault();
+        const cv = this.canvasView;
+        const rect = cv.canvas.getBoundingClientRect();
+        // Mausposition relativ zum Canvas (Bildschirm-Koordinaten)
+        const screenX = e.clientX - rect.left;
+        const screenY = e.clientY - rect.top;
+
+        // Zoom-Faktor berechnen
+        const zoomSchritt = 0.1;
+        const richtung = e.deltaY < 0 ? 1 : -1;
+        const neuerZoom = Math.min(5, Math.max(0.1, cv.zoomFaktor * (1 + richtung * zoomSchritt)));
+
+        // Zoom zum Cursor hin: Verschiebung anpassen, damit der Punkt unter dem
+        // Cursor an der gleichen Stelle bleibt
+        const faktorAenderung = neuerZoom / cv.zoomFaktor;
+        cv.verschiebungX = screenX - (screenX - cv.verschiebungX) * faktorAenderung;
+        cv.verschiebungY = screenY - (screenY - cv.verschiebungY) * faktorAenderung;
+        cv.zoomFaktor = neuerZoom;
+
+        cv.nurCanvasNeuZeichnen();
     }
 
     _erstelleObjekt(x, y, breite, hoehe) {
