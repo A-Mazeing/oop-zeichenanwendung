@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import { useDokument } from '../../hooks/useDokument.js';
 import { Zeichenobjekt } from '../../models/Zeichenobjekt.js';
+import { getDokument, snapshotSpeichern, emitChange } from '../../stores/dokumentStore.js';
 
 // Map JS typeof results to German-friendly type names
 function typName(value) {
@@ -80,10 +81,33 @@ function ObjektKarte({ obj }) {
   const klasse = obj.gibTypName();
   const attribute = obj.gibAttribute();
 
+  const handleSperreToggle = (e) => {
+    e.stopPropagation();
+    obj.sperreUmschalten();
+    snapshotSpeichern();
+  };
+
   return (
-    <div className="uml-card">
-      <div className="uml-card-header">
+    <div className={`uml-card${obj.gesperrt ? ' gesperrt' : ''}`}>
+      <div className="uml-card-header flex items-center justify-between">
         <span className="underline">{varName} : {klasse}</span>
+        <button
+          onClick={handleSperreToggle}
+          className="sperre-btn ml-2 p-0.5 rounded hover:bg-slate-200 transition-colors"
+          title={obj.gesperrt ? 'Entsperren' : 'Sperren'}
+        >
+          {obj.gesperrt ? (
+            <svg className="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+            </svg>
+          )}
+        </button>
       </div>
       <div className="uml-card-section">
         {Object.entries(attribute).map(([key, value]) => (
@@ -97,9 +121,9 @@ function ObjektKarte({ obj }) {
 function InspektorPanel() {
   const dokument = useDokument();
 
-  // Both sections default to collapsed
+  // Both sections default to collapsed (Objektansicht is open by default)
   const [klassenCollapsed, setKlassenCollapsed] = useState(true);
-  const [objekteCollapsed, setObjekteCollapsed] = useState(true);
+  const [objekteCollapsed, setObjekteCollapsed] = useState(false);
 
   const objekte = dokument?.objekte ?? [];
 
@@ -151,10 +175,10 @@ function InspektorPanel() {
         collapsed={objekteCollapsed}
         onToggle={() => setObjekteCollapsed((prev) => !prev)}
       >
-        {ausgewaehlteObjekte.length === 0 ? (
-          <p className="text-xs text-slate-400 px-1">Kein Objekt ausgewaehlt.</p>
+        {objekte.length === 0 ? (
+          <p className="text-xs text-slate-400 px-1">Keine Objekte vorhanden.</p>
         ) : (
-          ausgewaehlteObjekte.map((obj, index) => (
+          objekte.map((obj, index) => (
             <ObjektKarte key={obj._name || index} obj={obj} />
           ))
         )}

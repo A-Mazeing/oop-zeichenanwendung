@@ -202,7 +202,7 @@ function ZeichenCanvas() {
     if (werkzeugRef.current === 'auswahl') {
       // Check resize handles first
       const handle = findeHandle(pos.x, pos.y);
-      if (handle) {
+      if (handle && !handle.objekt.gesperrt) {
         istAmSkalierenRef.current = true;
         skalierEckeRef.current = handle.ecke;
         skalierObjektRef.current = handle.objekt;
@@ -216,7 +216,8 @@ function ZeichenCanvas() {
       dokument.alleAbwaehlen();
       if (obj) {
         obj.ausgewaehlt = true;
-        aktuellesObjektRef.current = obj;
+        // Allow selection but block dragging for locked objects
+        aktuellesObjektRef.current = obj.gesperrt ? null : obj;
         verschiebeOffsetRef.current = { x: pos.x - obj.x, y: pos.y - obj.y };
         neuZeichnen();
         // Update React selection state

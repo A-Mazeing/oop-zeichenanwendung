@@ -247,14 +247,14 @@ function CodeEditorTab({ textareaRef, onAusfuehrenRef }) {
     <div className="flex flex-1 h-full overflow-hidden">
       <textarea
         ref={actualRef}
-        className="flex-1 p-3 font-mono text-xs resize-none outline-none bg-slate-900 text-slate-100 leading-relaxed"
+        className="flex-1 p-3 font-mono text-sm resize-none outline-none bg-slate-900 text-slate-100 leading-relaxed"
         spellCheck={false}
         onKeyDown={handleKeyDown}
         placeholder={'// Beispiel:\nRechteck r1 = neu Rechteck(50, 50, 150, 100)\nr1.setzeFarbe("gelb")\nr1.verschieben(20, 0)'}
       />
       <div
         ref={konsoleRef}
-        className="w-72 bg-slate-950 text-slate-300 p-3 font-mono text-xs overflow-y-auto border-l border-slate-700"
+        className="w-72 bg-slate-950 text-slate-300 p-3 font-mono text-sm overflow-y-auto border-l border-slate-700"
       >
         <span className="text-slate-500">// Ausgabe erscheint hier</span>
       </div>

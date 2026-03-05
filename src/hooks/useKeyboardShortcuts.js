@@ -36,6 +36,7 @@ export function useKeyboardShortcuts(dispatch, objektZaehlerRef) {
         const dokument = getDokument();
         const ausgewaehlte = dokument.objekte.filter(o => o.ausgewaehlt);
         for (const obj of ausgewaehlte) {
+          if (obj.gesperrt) continue;
           if (typeof obj.stoppeAnimation === 'function') obj.stoppeAnimation();
           dokument.entfernen(obj);
         }
@@ -57,6 +58,7 @@ export function useKeyboardShortcuts(dispatch, objektZaehlerRef) {
         const zaehler = objektZaehlerRef?.current || {};
 
         for (const obj of ausgewaehlte) {
+          if (obj.gesperrt) continue;
           const json = obj.zuJSON();
           json.x += 20;
           json.y += 20;

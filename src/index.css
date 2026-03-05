@@ -133,6 +133,18 @@ body {
   border-bottom: none;
 }
 
+/* Locked object card styles */
+.uml-card.gesperrt {
+  border-style: dashed;
+  border-color: #ef4444;
+  opacity: 0.85;
+}
+
+.uml-card.gesperrt .uml-card-header {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
 /* ===== Code Editor styles ===== */
 .code-editor {
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;

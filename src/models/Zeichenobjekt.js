@@ -15,6 +15,7 @@ export class Zeichenobjekt {
         this.linienFarbe = "#1e293b";
         this.linienStaerke = 2;
         this.ausgewaehlt = false;
+        this.gesperrt = false; // Objektsperre
         this._name = "";       // Variablenname im Code-Editor
     }
 
@@ -89,6 +90,11 @@ export class Zeichenobjekt {
         }
     }
 
+    // Sperre umschalten
+    sperreUmschalten() {
+        this.gesperrt = !this.gesperrt;
+    }
+
     // Typ-Name fuer Anzeige
     gibTypName() {
         return this.constructor.name;
@@ -119,6 +125,7 @@ export class Zeichenobjekt {
             fuellFarbe: this.fuellFarbe,
             linienFarbe: this.linienFarbe,
             linienStaerke: this.linienStaerke,
+            gesperrt: this.gesperrt,
         };
     }
 
