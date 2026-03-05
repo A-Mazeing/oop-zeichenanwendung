@@ -17,7 +17,7 @@ function EditorBereich() {
   const editorRef = useRef(null);
   const { onMouseDown } = useEditorResize(editorRef);
   const [vorlagenOffen, setVorlagenOffen] = useState(false);
-  const codeEditorRef = useRef(null); // ref to CodeEditorTab's textarea
+  const codeEditorRef = useRef(null); // ref to CodeEditorTab (imperative: setValue/getValue)
 
   // Refs to child execute/apply callbacks
   const ausfuehrenRef = useRef(null);
@@ -26,7 +26,7 @@ function EditorBereich() {
   const handleVorlageClick = useCallback((vorlageKey) => {
     const vorlage = VORLAGEN[vorlageKey];
     if (vorlage && codeEditorRef.current) {
-      codeEditorRef.current.value = vorlage.code;
+      codeEditorRef.current.setValue(vorlage.code);
     }
     setVorlagenOffen(false);
   }, []);
@@ -158,7 +158,7 @@ function EditorBereich() {
       {/* Tab content */}
       <div className="flex-1 overflow-hidden">
         {state.editorTab === 'code' && (
-          <CodeEditorTab textareaRef={codeEditorRef} onAusfuehrenRef={ausfuehrenRef} />
+          <CodeEditorTab ref={codeEditorRef} onAusfuehrenRef={ausfuehrenRef} />
         )}
         {state.editorTab === 'klassen' && (
           <KlassenEditorTab onUebernehmenRef={uebernehmenRef} />

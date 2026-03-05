@@ -1,30 +1,45 @@
 // ============================================================
-// KlassenEditorTab.jsx — Klassen-Editor textarea + console
+// KlassenEditorTab.jsx — Klassen-Editor with CodeMirror + console
 // ============================================================
 // Uses the MethodenEditor class from src/editors/MethodenEditor.js
 // with the new "elements" constructor parameter to avoid DOM IDs.
 // ============================================================
 
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import CodeMirror from '@uiw/react-codemirror';
 import { getDokument, emitChange } from '../../stores/dokumentStore';
 import { MethodenEditor } from '../../editors/MethodenEditor.js';
+import { dunklesTheme } from '../../editors/editorTheme.js';
+import { pythonSubsetSprache } from '../../editors/pythonSubsetSprache.js';
+import { klassenEditorVervollstaendigung } from '../../editors/autovervollstaendigung.js';
 
 const KLASSEN = ['Rechteck', 'Ellipse', 'Linie', 'Dreieck', 'Polygon', 'TextObjekt', 'BildObjekt'];
 
 function KlassenEditorTab({ onUebernehmenRef }) {
-  const editorRef = useRef(null);
   const konsoleRef = useRef(null);
   const [aktuelleKlasse, setAktuelleKlasse] = useState('Rechteck');
   const editorInstanceRef = useRef(null);
+  const codeRef = useRef('');
+  const [editorValue, setEditorValue] = useState('');
+
+  // We create a fake editorElement-like object so MethodenEditor can
+  // read/write .value without a real textarea DOM node.
+  const fakeEditorElement = useRef({
+    get value() { return codeRef.current; },
+    set value(v) {
+      codeRef.current = v;
+      setEditorValue(v);
+    },
+  });
 
   // Initialize MethodenEditor once, after first render when refs are set
   const getEditor = useCallback(() => {
     if (editorInstanceRef.current) return editorInstanceRef.current;
-    if (!editorRef.current || !konsoleRef.current) return null;
+    if (!konsoleRef.current) return null;
 
     const dokument = getDokument();
     const instance = new MethodenEditor(dokument, null, null, null, {
-      editorElement: editorRef.current,
+      editorElement: fakeEditorElement.current,
       auswahlElement: null,
       konsoleElement: konsoleRef.current,
       uebernehmenBtn: null,
@@ -41,21 +56,25 @@ function KlassenEditorTab({ onUebernehmenRef }) {
     if (!editor) return;
 
     // Update refs in case they changed
-    editor.editorElement = editorRef.current;
+    editor.editorElement = fakeEditorElement.current;
     editor.konsoleElement = konsoleRef.current;
     editor.dokument = getDokument();
     editor._aktuelleKlasse = aktuelleKlasse;
     editor._ladeKlasse(aktuelleKlasse);
+
+    // After loading, sync the value from the fake element
+    codeRef.current = fakeEditorElement.current.value;
+    setEditorValue(fakeEditorElement.current.value);
   }, [aktuelleKlasse, getEditor]);
 
   const handleUebernehmen = useCallback(() => {
     const editor = getEditor();
-    if (!editor || !editorRef.current) return;
+    if (!editor) return;
 
-    editor.editorElement = editorRef.current;
+    editor.editorElement = fakeEditorElement.current;
     editor.konsoleElement = konsoleRef.current;
     editor.dokument = getDokument();
-    editor._editorInhalte[aktuelleKlasse] = editorRef.current.value;
+    editor._editorInhalte[aktuelleKlasse] = codeRef.current;
     editor._parseAlleKlassen();
     emitChange();
   }, [aktuelleKlasse, getEditor]);
@@ -75,11 +94,27 @@ function KlassenEditorTab({ onUebernehmenRef }) {
   const handleKlasseChange = useCallback((e) => {
     // Save current content before switching
     const editor = getEditor();
-    if (editor && editorRef.current) {
-      editor._editorInhalte[aktuelleKlasse] = editorRef.current.value;
+    if (editor) {
+      editor._editorInhalte[aktuelleKlasse] = codeRef.current;
     }
     setAktuelleKlasse(e.target.value);
   }, [aktuelleKlasse, getEditor]);
+
+  const handleChange = useCallback((value) => {
+    codeRef.current = value;
+  }, []);
+
+  // Autocompletion extension
+  const vervollstaendigung = useMemo(
+    () => klassenEditorVervollstaendigung(),
+    []
+  );
+
+  // Combined extensions
+  const extensions = useMemo(
+    () => [pythonSubsetSprache, vervollstaendigung],
+    [vervollstaendigung]
+  );
 
   return (
     <div className="flex flex-1 h-full overflow-hidden">
@@ -98,11 +133,25 @@ function KlassenEditorTab({ onUebernehmenRef }) {
           </select>
         </div>
 
-        <textarea
-          ref={editorRef}
-          className="flex-1 p-3 font-mono text-sm resize-none outline-none bg-slate-900 text-slate-100 leading-relaxed"
-          spellCheck={false}
-        />
+        <div className="flex-1 overflow-hidden">
+          <CodeMirror
+            value={editorValue}
+            onChange={handleChange}
+            theme={dunklesTheme}
+            extensions={extensions}
+            basicSetup={{
+              lineNumbers: true,
+              foldGutter: false,
+              highlightActiveLine: true,
+              bracketMatching: true,
+              closeBrackets: true,
+              autocompletion: false, // We provide our own
+              indentOnInput: true,
+            }}
+            height="100%"
+            style={{ height: '100%' }}
+          />
+        </div>
       </div>
 
       <div

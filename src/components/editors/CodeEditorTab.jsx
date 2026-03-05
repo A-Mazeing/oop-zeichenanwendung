@@ -1,11 +1,13 @@
 // ============================================================
-// CodeEditorTab.jsx — Code editor textarea + console
+// CodeEditorTab.jsx — Code editor with CodeMirror + console
 // ============================================================
 // Self-contained CodeInterpreter that parses a simple pseudocode
 // syntax and creates/manipulates Zeichenobjekte on the canvas.
 // ============================================================
 
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, useImperativeHandle, forwardRef, useMemo } from 'react';
+import CodeMirror from '@uiw/react-codemirror';
+import { keymap } from '@codemirror/view';
 import { getDokument } from '../../stores/dokumentStore';
 import { snapshotSpeichern } from '../../stores/dokumentStore';
 import { useAppState } from '../../stores/useAppStore';
@@ -16,6 +18,9 @@ import { Dreieck } from '../../models/Dreieck.js';
 import { TextObjekt } from '../../models/TextObjekt.js';
 import { BildObjekt } from '../../models/BildObjekt.js';
 import { Polygon } from '../../models/Polygon.js';
+import { dunklesTheme } from '../../editors/editorTheme.js';
+import { pseudocodeSprache } from '../../editors/pseudocodeSprache.js';
+import { pseudocodeVervollstaendigung } from '../../editors/autovervollstaendigung.js';
 
 // Lightweight code interpreter that doesn't depend on DOM IDs.
 // Replicates CodeEditor's parsing logic but works with refs.
@@ -169,15 +174,16 @@ class CodeInterpreter {
   }
 }
 
-function CodeEditorTab({ textareaRef, onAusfuehrenRef }) {
-  const internalTextareaRef = useRef(null);
+// Use forwardRef to expose setValue/getValue to parent (EditorBereich)
+const CodeEditorTab = forwardRef(function CodeEditorTab({ onAusfuehrenRef }, ref) {
+  const codeRef = useRef('');
   const konsoleRef = useRef(null);
   const interpreterRef = useRef(null);
 
   const state = useAppState();
 
-  // Use external ref if provided, otherwise internal
-  const actualRef = textareaRef || internalTextareaRef;
+  // State to drive CodeMirror's value prop (for external setValue calls)
+  const [editorValue, setEditorValue] = useState('');
 
   // Lazy-init the interpreter (no DOM dependency)
   const getInterpreter = useCallback(() => {
@@ -187,8 +193,20 @@ function CodeEditorTab({ textareaRef, onAusfuehrenRef }) {
     return interpreterRef.current;
   }, []);
 
+  // Expose setValue/getValue via imperative handle
+  useImperativeHandle(ref, () => ({
+    setValue(newCode) {
+      codeRef.current = newCode;
+      // Force CodeMirror to update via the value prop — we trigger a re-render
+      setEditorValue(newCode);
+    },
+    getValue() {
+      return codeRef.current;
+    },
+  }), []);
+
   const ausfuehren = useCallback(() => {
-    const code = actualRef.current?.value || '';
+    const code = codeRef.current;
     const dokument = getDokument();
     const interpreter = getInterpreter();
 
@@ -213,7 +231,7 @@ function CodeEditorTab({ textareaRef, onAusfuehrenRef }) {
 
     // Notify canvas to redraw
     snapshotSpeichern();
-  }, [actualRef, getInterpreter, state.fuellFarbe, state.linienFarbe]);
+  }, [getInterpreter, state.fuellFarbe, state.linienFarbe]);
 
   // Expose the execute callback to parent via ref
   useEffect(() => {
@@ -227,31 +245,53 @@ function CodeEditorTab({ textareaRef, onAusfuehrenRef }) {
     };
   }, [ausfuehren, onAusfuehrenRef]);
 
-  const handleKeyDown = useCallback((e) => {
-    if (e.ctrlKey && e.key === 'Enter') {
-      e.preventDefault();
+  // Ctrl+Enter keymap for CodeMirror
+  const ctrlEnterKeymap = useMemo(() => keymap.of([{
+    key: 'Ctrl-Enter',
+    run() {
       ausfuehren();
-    }
-    // Tab support in textarea
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const ta = actualRef.current;
-      const start = ta.selectionStart;
-      const end = ta.selectionEnd;
-      ta.value = ta.value.substring(0, start) + '    ' + ta.value.substring(end);
-      ta.selectionStart = ta.selectionEnd = start + 4;
-    }
-  }, [ausfuehren, actualRef]);
+      return true;
+    },
+  }]), [ausfuehren]);
+
+  // Autocompletion extension (depends on interpreter ref for variable names)
+  const vervollstaendigung = useMemo(
+    () => pseudocodeVervollstaendigung(interpreterRef),
+    []
+  );
+
+  // Combined extensions
+  const extensions = useMemo(
+    () => [pseudocodeSprache, ctrlEnterKeymap, vervollstaendigung],
+    [ctrlEnterKeymap, vervollstaendigung]
+  );
+
+  const handleChange = useCallback((value) => {
+    codeRef.current = value;
+  }, []);
 
   return (
     <div className="flex flex-1 h-full overflow-hidden">
-      <textarea
-        ref={actualRef}
-        className="flex-1 p-3 font-mono text-sm resize-none outline-none bg-slate-900 text-slate-100 leading-relaxed"
-        spellCheck={false}
-        onKeyDown={handleKeyDown}
-        placeholder={'// Beispiel:\nRechteck r1 = neu Rechteck(50, 50, 150, 100)\nr1.setzeFarbe("gelb")\nr1.verschieben(20, 0)'}
-      />
+      <div className="flex-1 overflow-hidden">
+        <CodeMirror
+          value={editorValue}
+          onChange={handleChange}
+          theme={dunklesTheme}
+          extensions={extensions}
+          placeholder={'// Beispiel:\nRechteck r1 = neu Rechteck(50, 50, 150, 100)\nr1.setzeFarbe("gelb")\nr1.verschieben(20, 0)'}
+          basicSetup={{
+            lineNumbers: true,
+            foldGutter: false,
+            highlightActiveLine: true,
+            bracketMatching: true,
+            closeBrackets: true,
+            autocompletion: false, // We provide our own
+            indentOnInput: true,
+          }}
+          height="100%"
+          style={{ height: '100%' }}
+        />
+      </div>
       <div
         ref={konsoleRef}
         className="w-72 bg-slate-950 text-slate-300 p-3 font-mono text-sm overflow-y-auto border-l border-slate-700"
@@ -260,6 +300,6 @@ function CodeEditorTab({ textareaRef, onAusfuehrenRef }) {
       </div>
     </div>
   );
-}
+});
 
 export default CodeEditorTab;
