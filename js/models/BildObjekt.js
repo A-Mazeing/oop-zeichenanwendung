@@ -6,8 +6,8 @@ export class BildObjekt extends Zeichenobjekt {
         super(x, y, breite, hoehe);
         this.quelle = quelle;
         this.fuellFarbe = "transparent";
-        this.linienFarbe = "#94a3b8";
-        this.linienStaerke = 1;
+        this.linienFarbe = "transparent";
+        this.linienStaerke = 0;
         this._bild = null;
         this._geladen = false;
         // OffscreenCanvas-Cache fuer performantes Rendering

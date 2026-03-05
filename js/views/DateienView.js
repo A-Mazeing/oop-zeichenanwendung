@@ -83,7 +83,7 @@ export class DateienView {
 
             html += `<div class="datei-eintrag" data-datei-name="${this._escapeAttr(datei.name)}" title="${this._escapeAttr(datei.name)}">
                 <img class="datei-thumb" src="${datei.dataUrl}" alt="${this._escapeAttr(datei.name)}">
-                <span class="datei-name">${this._escapeHtml(datei.name)}</span>
+                <span class="datei-name" data-vollname="${this._escapeAttr(datei.name)}">${this._escapeHtml(datei.name)}</span>
                 <button class="datei-loeschen" title="Loeschen" data-loeschen="${this._escapeAttr(datei.name)}">
                     <svg viewBox="0 0 24 24" class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -102,6 +102,16 @@ export class DateienView {
                 if (name) await this.dateiManager.dateiLoeschen(name);
             });
         });
+
+        // Umbenennen per Doppelklick auf den Dateinamen
+        this.listeDiv.querySelectorAll(".datei-name").forEach(span => {
+            span.addEventListener("dblclick", (e) => {
+                e.stopPropagation();
+                const alterName = span.dataset.vollname;
+                if (!alterName) return;
+                this._starteUmbenennen(span, alterName);
+            });
+        });
     }
 
     _escapeHtml(text) {
@@ -112,5 +122,46 @@ export class DateienView {
 
     _escapeAttr(text) {
         return text.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    _starteUmbenennen(span, alterName) {
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = alterName;
+        input.className = "datei-umbenennen-input";
+        input.style.cssText = "width:100%;font-size:10px;font-family:inherit;padding:1px 2px;border:1px solid #3b82f6;border-radius:3px;outline:none;background:#fff;";
+
+        span.replaceWith(input);
+        input.focus();
+        // Dateiname ohne Endung selektieren
+        const dotIndex = alterName.lastIndexOf(".");
+        if (dotIndex > 0) {
+            input.setSelectionRange(0, dotIndex);
+        } else {
+            input.select();
+        }
+
+        const abschliessen = async () => {
+            const neuerName = input.value.trim();
+            if (neuerName && neuerName !== alterName) {
+                await this.dateiManager.dateiUmbenennen(alterName, neuerName);
+            } else {
+                // Kein Umbenennen -> neu rendern um Originalzustand wiederherzustellen
+                this._rendere();
+            }
+        };
+
+        input.addEventListener("blur", () => abschliessen());
+        input.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                input.blur();
+            }
+            if (e.key === "Escape") {
+                e.preventDefault();
+                input.value = alterName; // Reset
+                input.blur();
+            }
+        });
     }
 }

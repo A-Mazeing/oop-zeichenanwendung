@@ -120,6 +120,50 @@ export class DateiManager {
         if (this._onAenderung) this._onAenderung();
     }
 
+    // Datei umbenennen
+    async dateiUmbenennen(alterName, neuerName) {
+        neuerName = neuerName.trim();
+        if (!neuerName || neuerName === alterName) return false;
+        if (this._cache.has(neuerName)) return false; // Name existiert bereits
+
+        const datei = this._cache.get(alterName);
+        if (!datei) return false;
+
+        // Alten Eintrag entfernen
+        this._cache.delete(alterName);
+        if (this._db) {
+            try {
+                const tx = this._db.transaction("bilder", "readwrite");
+                tx.objectStore("bilder").delete(alterName);
+                await new Promise((r, rej) => {
+                    tx.oncomplete = r;
+                    tx.onerror = () => rej(tx.error);
+                });
+            } catch (e) {
+                console.warn("IDB Loeschfehler beim Umbenennen:", e);
+            }
+        }
+
+        // Neuen Eintrag anlegen
+        datei.name = neuerName;
+        this._cache.set(neuerName, datei);
+        if (this._db) {
+            try {
+                const tx = this._db.transaction("bilder", "readwrite");
+                tx.objectStore("bilder").put(datei);
+                await new Promise((r, rej) => {
+                    tx.oncomplete = r;
+                    tx.onerror = () => rej(tx.error);
+                });
+            } catch (e) {
+                console.warn("IDB Schreibfehler beim Umbenennen:", e);
+            }
+        }
+
+        if (this._onAenderung) this._onAenderung();
+        return true;
+    }
+
     // Alle Dateien zurueckgeben (aus Cache)
     alleDateien() {
         return Array.from(this._cache.values()).sort((a, b) => a.name.localeCompare(b.name));

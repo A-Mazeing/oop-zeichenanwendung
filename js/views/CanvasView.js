@@ -15,7 +15,7 @@ export class CanvasView {
         this.verschiebungY = 0;
 
         // Raster-Einstellungen
-        this.rasterAnzeigen = false;
+        this.rasterAnzeigen = true;
         this.rasterGroesse = 20;
 
         // Canvas-Groesse an Container anpassen

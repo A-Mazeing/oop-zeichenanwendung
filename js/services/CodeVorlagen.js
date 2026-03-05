@@ -11,7 +11,7 @@ export const VORLAGEN = {
 Rechteck wand = neu Rechteck(100, 200, 200, 150)
 wand.setzeFarbe("#d97706")
 
-Dreieck dach = neu Dreieck(80, 200, 240, 120)
+Dreieck dach = neu Dreieck(80, 80, 240, 120)
 dach.setzeFarbe("#dc2626")
 
 Rechteck tuer = neu Rechteck(170, 280, 60, 70)

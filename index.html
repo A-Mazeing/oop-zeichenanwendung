@@ -103,7 +103,7 @@
             <div class="border-t border-panelBorder w-8 my-2"></div>
 
             <!-- Raster-Toggle -->
-            <button id="raster-toggle-btn" class="werkzeug-btn" title="Raster ein/aus (G)">
+            <button id="raster-toggle-btn" class="werkzeug-btn aktiv" title="Raster ein/aus (G)">
                 <svg viewBox="0 0 24 24" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5">
                     <line x1="4" y1="4" x2="4" y2="20"/><line x1="10" y1="4" x2="10" y2="20"/>
                     <line x1="16" y1="4" x2="16" y2="20"/><line x1="4" y1="4" x2="20" y2="4"/>
@@ -133,18 +133,13 @@
             <!-- Tab-Leiste -->
             <div class="linkes-panel-tabs flex border-b border-panelBorder bg-slate-50 shrink-0">
                 <button class="linkes-panel-tab aktiv" data-lp-tab="hierarchie">Hierarchie</button>
-                <button class="linkes-panel-tab" data-lp-tab="vererbung">Vererbung</button>
                 <button class="linkes-panel-tab" data-lp-tab="dateien">Dateien</button>
+                <button class="linkes-panel-tab" data-lp-tab="vererbung">Vererbung</button>
             </div>
 
             <!-- Tab: Hierarchie -->
             <div id="lp-tab-hierarchie" class="lp-tab-inhalt flex-1 overflow-y-auto">
                 <div id="hierarchie-liste" class="p-1"></div>
-            </div>
-
-            <!-- Tab: Vererbung -->
-            <div id="lp-tab-vererbung" class="lp-tab-inhalt flex-1 overflow-y-auto" style="display:none;">
-                <div id="vererbung-baum" class="p-2"></div>
             </div>
 
             <!-- Tab: Dateien -->
@@ -172,6 +167,11 @@
                         <span class="text-xs text-slate-500 mt-1">Bilder hier ablegen</span>
                     </div>
                 </div>
+            </div>
+
+            <!-- Tab: Vererbung -->
+            <div id="lp-tab-vererbung" class="lp-tab-inhalt flex-1 overflow-y-auto" style="display:none;">
+                <div id="vererbung-baum" class="p-2"></div>
             </div>
         </aside>
 
