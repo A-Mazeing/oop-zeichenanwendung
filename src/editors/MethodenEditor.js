@@ -7,7 +7,17 @@ import { BildObjekt } from "../models/BildObjekt.js";
 import { Polygon } from "../models/Polygon.js";
 
 export class MethodenEditor {
-    constructor(dokument, codeEditor, inspektorView, controller) {
+    /**
+     * @param {object} dokument
+     * @param {object|null} codeEditor
+     * @param {object|null} inspektorView
+     * @param {object|null} controller
+     * @param {object} [elemente] - Optional: pass DOM elements directly to skip getElementById.
+     *   { editorElement, auswahlElement, konsoleElement, uebernehmenBtn }
+     *   If omitted, falls back to document.getElementById (original behaviour).
+     *   If elemente is provided with skipInit: true, _initTabs and _initEvents are skipped.
+     */
+    constructor(dokument, codeEditor, inspektorView, controller, elemente) {
         this.dokument = dokument;
         this.codeEditor = codeEditor;
         this.inspektorView = inspektorView;
@@ -19,10 +29,19 @@ export class MethodenEditor {
         // Gespeicherter Editor-Inhalt pro Klasse (damit beim Tab-Wechsel nichts verloren geht)
         this._editorInhalte = {};
 
-        this.editorElement = document.getElementById("klassen-editor");
-        this.auswahlElement = document.getElementById("klassen-auswahl");
-        this.konsoleElement = document.getElementById("klassen-konsole");
-        this.uebernehmenBtn = document.getElementById("methoden-uebernehmen-btn");
+        if (elemente) {
+            // React mode: elements passed in directly
+            this.editorElement = elemente.editorElement || null;
+            this.auswahlElement = elemente.auswahlElement || null;
+            this.konsoleElement = elemente.konsoleElement || null;
+            this.uebernehmenBtn = elemente.uebernehmenBtn || null;
+        } else {
+            // Legacy DOM mode
+            this.editorElement = document.getElementById("klassen-editor");
+            this.auswahlElement = document.getElementById("klassen-auswahl");
+            this.konsoleElement = document.getElementById("klassen-konsole");
+            this.uebernehmenBtn = document.getElementById("methoden-uebernehmen-btn");
+        }
 
         this._aktuelleKlasse = "Rechteck";
 
@@ -58,8 +77,11 @@ export class MethodenEditor {
             },
         };
 
-        this._initTabs();
-        this._initEvents();
+        // Only init DOM-based tab switching and events in legacy mode
+        if (!elemente || !elemente.skipInit) {
+            this._initTabs();
+            this._initEvents();
+        }
         this._ladeKlasse("Rechteck");
         this._registriereTimerMethoden();
     }
@@ -84,25 +106,29 @@ export class MethodenEditor {
 
     _initEvents() {
         // Klassen-Auswahl Dropdown
-        this.auswahlElement.addEventListener("change", () => {
-            // Aktuellen Inhalt speichern
-            this._editorInhalte[this._aktuelleKlasse] = this.editorElement.value;
-            this._aktuelleKlasse = this.auswahlElement.value;
-            this._ladeKlasse(this._aktuelleKlasse);
-        });
+        if (this.auswahlElement) {
+            this.auswahlElement.addEventListener("change", () => {
+                // Aktuellen Inhalt speichern
+                this._editorInhalte[this._aktuelleKlasse] = this.editorElement.value;
+                this._aktuelleKlasse = this.auswahlElement.value;
+                this._ladeKlasse(this._aktuelleKlasse);
+            });
+        }
 
         // Uebernehmen-Button
-        this.uebernehmenBtn.addEventListener("click", () => {
-            this._editorInhalte[this._aktuelleKlasse] = this.editorElement.value;
-            this._parseAlleKlassen();
-        });
+        if (this.uebernehmenBtn) {
+            this.uebernehmenBtn.addEventListener("click", () => {
+                this._editorInhalte[this._aktuelleKlasse] = this.editorElement.value;
+                this._parseAlleKlassen();
+            });
+        }
     }
 
     // --- Klasse in den Editor laden ---
     _ladeKlasse(klassenName) {
         // Wenn bereits gespeicherter Inhalt vorhanden, diesen laden
         if (this._editorInhalte[klassenName]) {
-            this.editorElement.value = this._editorInhalte[klassenName];
+            if (this.editorElement) this.editorElement.value = this._editorInhalte[klassenName];
             return;
         }
 
@@ -151,17 +177,19 @@ export class MethodenEditor {
         code += `    # r1.stoppeAnimation()\n`;
         code += `\n`;
 
-        this.editorElement.value = code;
+        if (this.editorElement) this.editorElement.value = code;
         this._editorInhalte[klassenName] = code;
     }
 
     // --- Alle Klassen parsen ---
     _parseAlleKlassen() {
         // Aktuellen Editor-Inhalt speichern
-        this._editorInhalte[this._aktuelleKlasse] = this.editorElement.value;
+        if (this.editorElement) {
+            this._editorInhalte[this._aktuelleKlasse] = this.editorElement.value;
+        }
 
         this.eigeneMethoden = {};
-        this.konsoleElement.innerHTML = "";
+        if (this.konsoleElement) this.konsoleElement.innerHTML = "";
         let gesamtFehler = 0;
         let gesamtMethoden = 0;
 
@@ -183,9 +211,11 @@ export class MethodenEditor {
         }
 
         // Eigene Methoden an den CodeEditor und InspektorView weitergeben
-        this.codeEditor.eigeneMethoden = this.eigeneMethoden;
-        this.inspektorView._eigeneMethoden = this.eigeneMethoden;
-        this.inspektorView._rendereKlassen();
+        if (this.codeEditor) this.codeEditor.eigeneMethoden = this.eigeneMethoden;
+        if (this.inspektorView) {
+            this.inspektorView._eigeneMethoden = this.eigeneMethoden;
+            this.inspektorView._rendereKlassen();
+        }
         this.dokument.aktualisieren(); // Objektkarten neu rendern
 
         // Eigene Methoden als echte Funktionen auf den Prototypen setzen
@@ -929,16 +959,19 @@ export class MethodenEditor {
 
     // --- Konsole ---
     _konsoleInfo(text) {
+        if (!this.konsoleElement) return;
         this.konsoleElement.innerHTML += `<div class="info">&gt; ${this._escapeHtml(text)}</div>`;
         this.konsoleElement.scrollTop = this.konsoleElement.scrollHeight;
     }
 
     _konsoleErfolg(text) {
+        if (!this.konsoleElement) return;
         this.konsoleElement.innerHTML += `<div class="erfolg">${this._escapeHtml(text)}</div>`;
         this.konsoleElement.scrollTop = this.konsoleElement.scrollHeight;
     }
 
     _konsoleFehler(text) {
+        if (!this.konsoleElement) return;
         this.konsoleElement.innerHTML += `<div class="fehler">${this._escapeHtml(text)}</div>`;
         this.konsoleElement.scrollTop = this.konsoleElement.scrollHeight;
     }
@@ -952,7 +985,9 @@ export class MethodenEditor {
     // --- Serialisierung ---
     gibDaten() {
         // Aktuellen Editor-Inhalt speichern
-        this._editorInhalte[this._aktuelleKlasse] = this.editorElement.value;
+        if (this.editorElement) {
+            this._editorInhalte[this._aktuelleKlasse] = this.editorElement.value;
+        }
         return {
             editorInhalte: { ...this._editorInhalte },
             eigeneMethoden: { ...this.eigeneMethoden },
@@ -970,10 +1005,12 @@ export class MethodenEditor {
         // Aktive Klasse neu laden
         this._ladeKlasse(this._aktuelleKlasse);
         // Methoden registrieren und Inspektor aktualisieren
-        this.codeEditor.eigeneMethoden = this.eigeneMethoden;
-        this.inspektorView._eigeneMethoden = this.eigeneMethoden;
+        if (this.codeEditor) this.codeEditor.eigeneMethoden = this.eigeneMethoden;
+        if (this.inspektorView) {
+            this.inspektorView._eigeneMethoden = this.eigeneMethoden;
+            this.inspektorView._rendereKlassen();
+        }
         this._registriereMethoden();
-        this.inspektorView._rendereKlassen();
         this.dokument.aktualisieren();
     }
 }

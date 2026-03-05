@@ -4,6 +4,7 @@ __pycache__/
 
 # Distribution / packaging
 node_modules/
+dist/
 
 # OS files
 .DS_Store

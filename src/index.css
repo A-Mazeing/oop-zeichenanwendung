@@ -1,0 +1,155 @@
+@import 'tailwindcss';
+
+/* ===== Custom Theme ===== */
+@theme {
+  --color-primary: #4a90d9;
+  --color-primary-dark: #3a7bc8;
+  --color-primary-light: #6ba3e0;
+  --color-header-bg: #2c3e50;
+  --color-header-text: #ecf0f1;
+  --color-panel-bg: #f8f9fa;
+  --color-panel-border: #dee2e6;
+  --color-canvas-bg: #ffffff;
+  --color-selection: #4a90d9;
+  --color-grid: #e0e0e0;
+  --color-handle: #4a90d9;
+  --color-handle-border: #ffffff;
+  --color-success: #27ae60;
+  --color-warning: #f39c12;
+  --color-danger: #e74c3c;
+  --color-info: #3498db;
+}
+
+/* ===== Base Styles ===== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ===== Scrollbar Styling ===== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
+}
+
+/* ===== Canvas cursor styles ===== */
+.cursor-crosshair {
+  cursor: crosshair;
+}
+
+.cursor-move {
+  cursor: move;
+}
+
+.cursor-grab {
+  cursor: grab;
+}
+
+.cursor-grabbing {
+  cursor: grabbing;
+}
+
+/* ===== Selection highlight ===== */
+::selection {
+  background: var(--color-primary);
+  color: white;
+}
+
+/* ===== Panel transitions ===== */
+.panel-transition {
+  transition: width 0.2s ease, opacity 0.2s ease;
+}
+
+/* ===== Tooltip ===== */
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #333;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  z-index: 1000;
+}
+
+[data-tooltip]:hover::after {
+  opacity: 1;
+}
+
+/* ===== UML Card styles (for InspektorPanel) ===== */
+.uml-card {
+  border: 2px solid #333;
+  border-radius: 4px;
+  background: white;
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.uml-card-header {
+  background: #f0f0f0;
+  padding: 6px 8px;
+  font-weight: bold;
+  text-align: center;
+  border-bottom: 2px solid #333;
+}
+
+.uml-card-section {
+  padding: 4px 8px;
+  border-bottom: 1px solid #ddd;
+}
+
+.uml-card-section:last-child {
+  border-bottom: none;
+}
+
+/* ===== Code Editor styles ===== */
+.code-editor {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  tab-size: 4;
+}
+
+/* ===== Inheritance diagram connector styles ===== */
+.inheritance-line {
+  stroke: #666;
+  stroke-width: 2;
+  fill: none;
+}
+
+.inheritance-arrow {
+  fill: white;
+  stroke: #666;
+  stroke-width: 2;
+}

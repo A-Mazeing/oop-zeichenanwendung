@@ -15,6 +15,12 @@ export class Dokument {
         this._listener.push(callback);
     }
 
+    // Observer-Pattern: Listener entfernen
+    beobachterEntfernen(callback) {
+        const idx = this._listener.indexOf(callback);
+        if (idx !== -1) this._listener.splice(idx, 1);
+    }
+
     // Event feuern – alle Views werden benachrichtigt
     _benachrichtigen() {
         for (const cb of this._listener) {
