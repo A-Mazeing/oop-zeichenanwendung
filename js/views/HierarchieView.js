@@ -61,6 +61,9 @@ export class HierarchieView {
             const icon = this._typIcons[typ] || this._typIcons.Rechteck;
             const ausgewaehlt = obj.ausgewaehlt ? " ausgewaehlt" : "";
             const kurzTyp = typ.replace("Objekt", "").substring(0, 4);
+            const sperreIcon = obj.gesperrt
+                ? `<svg class="h-sperre-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" title="Gesperrt"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>`
+                : "";
 
             // Pfeile: nach oben nur wenn nicht erstes, nach unten nur wenn nicht letztes
             const pfeilHoch = i > 0
@@ -73,6 +76,7 @@ export class HierarchieView {
             html += `<div class="hierarchie-eintrag${ausgewaehlt}" data-h-index="${i}" data-h-name="${name}">
                 <svg class="h-icon" viewBox="0 0 14 14" style="color:${icon.farbe}">${icon.svg}</svg>
                 <span class="h-name">${name}</span>
+                ${sperreIcon}
                 <span class="h-typ">${kurzTyp}</span>
                 <span class="h-pfeile">${pfeilHoch}${pfeilRunter}</span>
             </div>`;

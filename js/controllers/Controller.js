@@ -108,6 +108,8 @@ export class Controller {
             if (e.key === "Delete" || e.key === "Backspace") {
                 const ausgewaehlte = this.dokument.objekte.filter(o => o.ausgewaehlt);
                 for (const obj of ausgewaehlte) {
+                    // Gesperrte Objekte nicht loeschen
+                    if (obj.gesperrt) continue;
                     // Animation stoppen, falls vorhanden
                     if (typeof obj.stoppeAnimation === "function") {
                         obj.stoppeAnimation();
@@ -208,7 +210,7 @@ export class Controller {
         if (this.aktivesWerkzeug === "auswahl") {
             // Zuerst pruefen ob ein Resize-Handle geklickt wurde
             const handle = this._findeHandle(pos.x, pos.y);
-            if (handle) {
+            if (handle && !handle.objekt.gesperrt) {
                 this._istAmSkalieren = true;
                 this._skalierEcke = handle.ecke;
                 this._skalierObjekt = handle.objekt;
@@ -224,9 +226,14 @@ export class Controller {
             this.dokument.alleAbwaehlen();
             if (obj) {
                 obj.ausgewaehlt = true;
-                this._aktuellesObjekt = obj;
-                this._verschiebeOffsetX = pos.x - obj.x;
-                this._verschiebeOffsetY = pos.y - obj.y;
+                // Gesperrte Objekte koennen ausgewaehlt, aber nicht verschoben werden
+                if (!obj.gesperrt) {
+                    this._aktuellesObjekt = obj;
+                    this._verschiebeOffsetX = pos.x - obj.x;
+                    this._verschiebeOffsetY = pos.y - obj.y;
+                } else {
+                    this._aktuellesObjekt = null;
+                }
                 // Sofortiger Canvas-Redraw fuer lag-freies Drag-Feedback
                 // (umgeht die schwere Observer-Kette beim ersten Frame)
                 this.canvasView.neuZeichnen();
@@ -702,6 +709,8 @@ export class Controller {
         this.dokument.alleAbwaehlen();
 
         for (const obj of ausgewaehlte) {
+            // Gesperrte Objekte nicht duplizieren
+            if (obj.gesperrt) continue;
             // Objekt serialisieren und neu erstellen
             const json = obj.zuJSON();
             json.x += 20;

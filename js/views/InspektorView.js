@@ -8,6 +8,7 @@ export class InspektorView {
         this.dokument = dokument;
         this._onObjektKlick = null; // Callback wenn Objekt im Inspektor geklickt wird
         this._onObjektUmbenennen = null; // Callback wenn Objekt umbenannt wird: (index, neuerName) => void
+        this._onObjektSperreUmschalten = null; // Callback wenn Sperre umgeschaltet wird: (index) => void
         this._eingeklappteObjekte = new Set(); // Merkt sich eingeklappte Objektkarten (nach Name)
         this._eingeklapptDokument = false; // Merkt sich ob Dokument-Karte eingeklappt
         this._inspektorThrottleTimer = null; // Throttle-Timer fuer Inspector-Updates
@@ -45,6 +46,10 @@ export class InspektorView {
 
     setzeUmbenennenHandler(handler) {
         this._onObjektUmbenennen = handler;
+    }
+
+    setzeSperreHandler(handler) {
+        this._onObjektSperreUmschalten = handler;
     }
 
     _rendereKlassen() {
@@ -220,8 +225,16 @@ export class InspektorView {
                 : [];
             const alleMethoden = [...methoden, ...eigeneMethoden];
 
-            const karteHtml = `<div class="uml-karte objekt-karte${istAusgewaehlt ? " ausgewaehlt" : ""}${istEingeklappt ? " eingeklappt" : ""}" data-objekt-index="${idx}" data-objekt-name="${name}">
+            const karteHtml = `<div class="uml-karte objekt-karte${istAusgewaehlt ? " ausgewaehlt" : ""}${istEingeklappt ? " eingeklappt" : ""}${obj.gesperrt ? " gesperrt" : ""}" data-objekt-index="${idx}" data-objekt-name="${name}">
                 <div class="uml-karte-kopf objekt-karte-toggle">
+                    <button class="sperre-btn" data-sperre-index="${idx}" title="${obj.gesperrt ? 'Entsperren' : 'Sperren'}">
+                        <svg viewBox="0 0 24 24" class="sperre-icon${obj.gesperrt ? ' gesperrt' : ''}" fill="none" stroke="currentColor" stroke-width="2">
+                            ${obj.gesperrt
+                                ? '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>'
+                                : '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 019.9-1"/>'
+                            }
+                        </svg>
+                    </button>
                     ${name} : ${obj.gibTypName()}
                     <span class="toggle-pfeil">&#9660;</span>
                 </div>
@@ -293,12 +306,26 @@ export class InspektorView {
         // Doppelklick-Handler zum Umbenennen auf Objekt-Karten-Koepfe
         this.objektDiv.querySelectorAll(".objekt-karte[data-objekt-index] .objekt-karte-toggle").forEach(kopf => {
             kopf.addEventListener("dblclick", (e) => {
+                // Nicht umbenennen wenn auf Sperre-Button geklickt
+                if (e.target.closest(".sperre-btn")) return;
                 e.stopPropagation();
                 e.preventDefault();
                 const karte = kopf.closest(".objekt-karte");
                 const idx = parseInt(karte.dataset.objektIndex);
                 const alterName = karte.dataset.objektName;
                 this._starteInlineUmbenennung(kopf, idx, alterName);
+            });
+        });
+
+        // Sperre-Handler auf Sperre-Buttons
+        this.objektDiv.querySelectorAll(".sperre-btn[data-sperre-index]").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                const idx = parseInt(btn.dataset.sperreIndex);
+                if (this._onObjektSperreUmschalten) {
+                    this._onObjektSperreUmschalten(idx);
+                }
             });
         });
     }

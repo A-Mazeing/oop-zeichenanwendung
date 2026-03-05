@@ -42,6 +42,7 @@ export function vonJSON(daten) {
     obj.fuellFarbe = daten.fuellFarbe || "#3b82f6";
     obj.linienFarbe = daten.linienFarbe || "#1e293b";
     obj.linienStaerke = daten.linienStaerke != null ? daten.linienStaerke : 2;
+    obj.gesperrt = daten.gesperrt || false;
     obj._name = daten.name || "";
     return obj;
 }

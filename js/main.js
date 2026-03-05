@@ -155,6 +155,14 @@ import { MethodenEditor } from "./editors/MethodenEditor.js";
         dokument.aktualisieren();
     });
 
+    // Inspektor-Sperre -> Objekt sperren/entsperren
+    inspektorView.setzeSperreHandler((index) => {
+        const obj = dokument.objekte[index];
+        if (!obj) return;
+        obj.sperreUmschalten();
+        dokument.aktualisieren();
+    });
+
     // Wenn Objekte per Maus erstellt werden -> im Code-Editor registrieren
     dokument.beobachterHinzufuegen(() => {
         for (const obj of dokument.objekte) {

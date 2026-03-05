@@ -193,7 +193,7 @@
             </div>
 
             <!-- Objektansicht -->
-            <div id="objektansicht-bereich" class="flex-1 flex flex-col overflow-hidden inspektor-section-eingeklappt">
+            <div id="objektansicht-bereich" class="flex-1 flex flex-col overflow-hidden">
                 <h3 class="inspektor-section-header px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider bg-slate-50 border-b border-panelBorder shrink-0 cursor-pointer select-none flex items-center justify-between" data-section="objekte">
                     <span>Objektansicht</span>
                     <svg class="inspektor-section-pfeil w-3 h-3 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
@@ -256,11 +256,11 @@
         <!-- Tab: Code-Editor -->
         <div id="tab-code" class="tab-inhalt flex flex-1 overflow-hidden">
             <textarea id="code-editor"
-                class="flex-1 p-3 font-mono text-xs resize-none outline-none bg-slate-900 text-slate-100 leading-relaxed"
+                class="flex-1 p-3 font-mono text-sm resize-none outline-none bg-slate-900 text-slate-100 leading-relaxed"
                 spellcheck="false"
                 placeholder="// Beispiel:&#10;Rechteck r1 = neu Rechteck(50, 50, 150, 100)&#10;r1.setzeFarbe(&quot;gelb&quot;)&#10;r1.verschieben(20, 0)"></textarea>
             <div id="konsole"
-                class="w-72 bg-slate-950 text-slate-300 p-3 font-mono text-xs overflow-y-auto border-l border-slate-700">
+                class="w-72 bg-slate-950 text-slate-300 p-3 font-mono text-sm overflow-y-auto border-l border-slate-700">
                 <span class="text-slate-500">// Ausgabe erscheint hier</span>
             </div>
         </div>
@@ -286,11 +286,11 @@
                     </button>
                 </div>
                 <textarea id="klassen-editor"
-                    class="flex-1 p-3 font-mono text-xs resize-none outline-none bg-slate-900 text-slate-100 leading-relaxed"
+                    class="flex-1 p-3 font-mono text-sm resize-none outline-none bg-slate-900 text-slate-100 leading-relaxed"
                     spellcheck="false"></textarea>
             </div>
             <div id="klassen-konsole"
-                class="w-72 bg-slate-950 text-slate-300 p-3 font-mono text-xs overflow-y-auto border-l border-slate-700">
+                class="w-72 bg-slate-950 text-slate-300 p-3 font-mono text-sm overflow-y-auto border-l border-slate-700">
                 <span class="text-slate-500">// Methoden-Status erscheint hier</span>
             </div>
         </div>

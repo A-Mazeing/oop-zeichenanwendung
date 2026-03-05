@@ -15,6 +15,7 @@ export class Zeichenobjekt {
         this.linienFarbe = "#1e293b";
         this.linienStaerke = 2;
         this.ausgewaehlt = false;
+        this.gesperrt = false; // Sperre: Objekt kann nicht verschoben/veraendert werden
         this._name = "";       // Variablenname im Code-Editor
     }
 
@@ -107,6 +108,11 @@ export class Zeichenobjekt {
         };
     }
 
+    // Sperre umschalten
+    sperreUmschalten() {
+        this.gesperrt = !this.gesperrt;
+    }
+
     // Serialisierung: Objekt als einfaches JSON-Objekt zurueckgeben
     zuJSON() {
         return {
@@ -119,6 +125,7 @@ export class Zeichenobjekt {
             fuellFarbe: this.fuellFarbe,
             linienFarbe: this.linienFarbe,
             linienStaerke: this.linienStaerke,
+            gesperrt: this.gesperrt,
         };
     }
 

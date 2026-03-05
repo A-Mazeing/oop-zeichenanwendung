@@ -420,6 +420,7 @@
     cursor: pointer;
     position: relative;
     user-select: none;
+    padding-left: 26px;
 }
 
 /* Umbenennen-Eingabefeld in Objektkarten */
@@ -828,4 +829,61 @@
 .vorlagen-item:hover {
     background: #e0f2fe;
     color: #0369a1;
+}
+
+/* --- Sperre-Button in Objektkarten --- */
+.sperre-btn {
+    position: absolute;
+    left: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    padding: 2px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    transition: background 0.15s ease;
+}
+
+.sperre-btn:hover {
+    background: rgba(0, 0, 0, 0.08);
+}
+
+.sperre-icon {
+    width: 12px;
+    height: 12px;
+    color: #94a3b8;
+    transition: color 0.15s ease;
+}
+
+.sperre-icon.gesperrt {
+    color: #ef4444;
+}
+
+/* Gesperrte Objektkarte */
+.uml-karte.objekt-karte.gesperrt {
+    opacity: 0.75;
+    border-style: dashed;
+}
+
+.uml-karte.objekt-karte.gesperrt .uml-karte-kopf {
+    background: #fee2e2;
+}
+
+.uml-karte.objekt-karte.gesperrt.ausgewaehlt .uml-karte-kopf {
+    background: #fecaca;
+}
+
+/* Sperre-Icon in der Hierarchie */
+.h-sperre-icon {
+    width: 10px;
+    height: 10px;
+    color: #ef4444;
+    flex-shrink: 0;
 }
